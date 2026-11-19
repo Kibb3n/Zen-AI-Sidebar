@@ -1,0 +1,15 @@
+/* Chat icon inside the URL bar (Zen keeps the URL bar at the top of the left sidebar).
+   The sidebar's own styling, including this button, is embedded in dia-sidebar.uc.js; this copy is a harmless duplicate. */
+#dia-sidebar-urlbar .urlbar-icon {
+  list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='context-stroke' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5a1.5 1.5 0 0 1-1.5 1.5H8l-3 2.5V11H4.5A1.5 1.5 0 0 1 3 9.5z'/%3E%3C/svg%3E");
+  -moz-context-properties: fill, fill-opacity, stroke;
+  fill: none;
+  stroke: currentColor;
+}
+/* fallback toolbar button (only created if the URL bar can't be found) */
+#dia-sidebar {
+  list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='context-stroke' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5a1.5 1.5 0 0 1-1.5 1.5H8l-3 2.5V11H4.5A1.5 1.5 0 0 1 3 9.5z'/%3E%3C/svg%3E");
+  -moz-context-properties: fill, stroke;
+  fill: none;
+  stroke: currentColor;
+}
