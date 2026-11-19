@@ -1,7 +1,0 @@
-/* Toolbar button icon. The sidebar's own styling is embedded in dia-sidebar.uc.js so the two can never drift out of sync. */
-#dia-sidebar {
-  list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='context-stroke' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='3' width='12' height='10' rx='2.2'/%3E%3Cpath d='M10 3.4v9.2'/%3E%3C/svg%3E");
-  -moz-context-properties: fill, stroke;
-  fill: currentColor;
-  stroke: currentColor;
-}
