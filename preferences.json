@@ -15,14 +15,18 @@
         "value": "anthropic"
       },
       {
-        "label": "OpenAI-compatible (OpenAI, Gemini, Groq, Ollama...)",
+        "label": "Google Gemini (native API: web search, PDFs, images)",
+        "value": "gemini"
+      },
+      {
+        "label": "OpenAI-compatible (OpenAI, Groq, Ollama, Gemini's compatibility endpoint...)",
         "value": "openai"
       }
     ]
   },
   {
     "property": "mod.dia-sidebar.apikey",
-    "label": "API key (Anthropic/OpenAI-compatible; for afm-server only if its Settings show a key)",
+    "label": "API key (Anthropic, Gemini, or OpenAI-compatible; for afm-server only if its Settings show a key)",
     "type": "string",
     "default": "",
     "defaultValue": ""
@@ -36,7 +40,7 @@
   },
   {
     "property": "mod.dia-sidebar.model",
-    "label": "Model (blank = provider default)",
+    "label": "Model (blank = provider default: claude-haiku-5-5, gemini-3.5-flash, apple.local, gpt-4o-mini)",
     "type": "string",
     "default": "",
     "defaultValue": ""
@@ -115,8 +119,68 @@
     ]
   },
   {
+    "property": "mod.dia-sidebar.websearch",
+    "label": "Web search (the globe button and @Web always work unless this is Off)",
+    "type": "dropdown",
+    "default": "default",
+    "defaultValue": "default",
+    "options": [
+      {
+        "label": "Default: automatic with Anthropic/Gemini, on request with other providers",
+        "value": "default"
+      },
+      {
+        "label": "Automatic: the model decides (other providers do an extra quick check per message)",
+        "value": "auto"
+      },
+      {
+        "label": "Only when I turn on the globe button or use @Web",
+        "value": "manual"
+      },
+      {
+        "label": "Off",
+        "value": "off"
+      }
+    ]
+  },
+  {
+    "property": "mod.dia-sidebar.searchengine",
+    "label": "Search engine for providers without built-in search (Apple, OpenAI-compatible)",
+    "type": "dropdown",
+    "default": "duckduckgo",
+    "defaultValue": "duckduckgo",
+    "options": [
+      {
+        "label": "DuckDuckGo (no key; can rate-limit)",
+        "value": "duckduckgo"
+      },
+      {
+        "label": "Brave Search (API key)",
+        "value": "brave"
+      },
+      {
+        "label": "SearXNG (your own instance)",
+        "value": "searxng"
+      }
+    ]
+  },
+  {
+    "property": "mod.dia-sidebar.searchkey",
+    "label": "Brave Search API key (only if Brave is selected above)",
+    "type": "string",
+    "default": "",
+    "defaultValue": ""
+  },
+  {
+    "property": "mod.dia-sidebar.searxurl",
+    "label": "SearXNG address, e.g. https://searx.example.org (JSON output must be enabled; only if SearXNG is selected)",
+    "type": "string",
+    "default": "",
+    "defaultValue": ""
+  },
+  {
     "property": "mod.dia-sidebar.thinking",
-    "label": "Show the model's thinking (Anthropic only; uses more tokens, needs a model that supports extended thinking)",
+    "label": "Show the model's thinking (Anthropic and Gemini only; uses more tokens, needs a model that supports it)",
     "type": "dropdown",
     "default": "0",
     "defaultValue": "0",

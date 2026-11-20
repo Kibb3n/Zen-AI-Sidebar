@@ -5,6 +5,7 @@
 // ==/UserScript==
 
 (() => {
+  const diaMain = () => {
   const ID = "dia-sidebar";
   const PREF = "mod.dia-sidebar.";
   const NS = "http://www.w3.org/1999/xhtml";
@@ -41,6 +42,15 @@
     { id: "yt-takeaways", name: "Takeaways", prompt: "What are the main takeaways from this video? Answer in a few concise bullet points with no timestamps." },
     { id: "yt-tldr", name: "TL;DR", prompt: "Give a two-sentence TL;DR of this video. No timestamps." },
   ];
+  // For models without a built-in search tool: one quick call decides whether (and what) to search
+  const ROUTER_SYSTEM =
+    "You decide whether a browser assistant must search the web to answer the user's latest message. " +
+    "Reply with exactly NO, or with SEARCH: followed by one concise web search query (max 12 words). " +
+    "Answer NO for questions about the page the user is viewing, rewriting, summarizing, translating, math, coding help, or timeless general knowledge. " +
+    "Answer SEARCH for news, recent or changing facts, prices, products, people or companies you may not know, or when the user asks to look something up online. Never add anything else.";
+  const ROUTER_FORCED =
+    "Write the single best web search query (max 12 words) for the user's latest message, using the recent chat for context. " +
+    "Reply with exactly SEARCH: followed by the query, nothing else.";
   // @formats: steer the shape of the answer
   const FORMATS = [
     { id: "list", name: "list", hint: "Bulleted list", prompt: "Format the answer as a concise bulleted list." },
@@ -77,6 +87,7 @@
     folder: "M2.5 4.5h4l1.2 1.5h5.8v6.5h-11z",
     play: "M5.5 3.8v8.4L12 8z",
     check: "M3.5 8.5l3 3 6-6.5",
+    globe: "M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zM2.5 8h11M8 2.5c1.6 1.5 2.4 3.4 2.4 5.5S9.6 12 8 13.5C6.4 12 5.6 10.1 5.6 8S6.4 4 8 2.5z",
     drop: "M8 11V3M4.5 6.5L8 3l3.5 3.5M3 11.5v1A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5v-1",
   };
   const FILLED = new Set(["stop", "play"]);
@@ -243,6 +254,22 @@
   .dia-send[disabled] { opacity: 0.2; cursor: default; }
   .dia-addnote { font-size: 12px; color: var(--mute); padding: 0 2px; animation: dia-fade 0.3s ease both; }
 
+  .dia-row-left { display: flex; align-items: center; gap: 2px; }
+  .dia-web[hidden] { display: none; }
+  .dia-web.dia-on { color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); }
+
+  /* web sources */
+  .dia-sources { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 12px; color: var(--mute); animation: dia-fade 0.4s ease both; }
+  .dia-searched { display: inline-flex; align-items: center; gap: 5px; margin-inline-end: 3px; }
+  .dia-searched .dia-svg { width: 13px; height: 13px; }
+  .dia-src { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 9px 3px 7px; border-radius: 9px; background: var(--soft); color: inherit; text-decoration: none; cursor: pointer; transition: background-color 0.15s, color 0.15s; }
+  .dia-src:hover { background: var(--soft2); color: var(--fg); }
+  .dia-src b { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg); opacity: 0.7; }
+  .dia-src span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+  .dia-src .dia-fav { margin: 0; }
+  .dia-cite { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; margin-inline: 1px 2px; box-sizing: border-box; border-radius: 8px; background: var(--soft2); color: var(--mute); font-size: 10.5px; font-weight: 600; text-decoration: none; cursor: pointer; vertical-align: 1px; transition: background-color 0.15s, color 0.15s; }
+  .dia-cite:hover { background: var(--accent); color: #fff; }
+
   /* drop zone: files and tabs dragged onto the sidebar */
   .dia-dropzone { position: absolute; inset: 8px; z-index: 9; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; pointer-events: none;
     border: 1.5px dashed color-mix(in srgb, var(--accent) 60%, transparent); border-radius: 18px; background: color-mix(in srgb, var(--bg) 90%, transparent);
@@ -290,15 +317,20 @@
 @keyframes dia-bounce { 0%, 75%, 100% { opacity: 0.3; transform: translateY(0); } 38% { opacity: 0.95; transform: translateY(-4px); } }
 @keyframes dia-chunk { from { opacity: 0; filter: blur(1px); } to { opacity: 1; filter: blur(0); } }
 @keyframes dia-fade { from { opacity: 0; } to { opacity: 1; } }
-/* the chat button inside the URL bar (in Zen, the URL bar sits at the top of the left sidebar) */
+/* the chat button inside the URL bar (in Zen, the URL bar sits at the top of the left sidebar).
+   Icon: Ionicons "chatbubble-ellipses" (MIT), the same glyph Zen ships for its own chat icon.
+   It is hidden until you hover the URL bar and stays visible while the sidebar is open. Zen already
+   does this for every .urlbar-page-action in its sidebar layout; the rules below cover other layouts. */
 #dia-sidebar-urlbar { margin-inline: 1px; }
+#dia-sidebar-urlbar:not([open]) { opacity: 0; transition: opacity 0.15s; }
+#urlbar:hover #dia-sidebar-urlbar, #urlbar[focused] #dia-sidebar-urlbar, #dia-sidebar-urlbar:hover, #dia-sidebar-urlbar[open] { opacity: 1; }
 #dia-sidebar-urlbar .urlbar-icon {
-  list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='context-stroke' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5a1.5 1.5 0 0 1-1.5 1.5H8l-3 2.5V11H4.5A1.5 1.5 0 0 1 3 9.5z'/%3E%3C/svg%3E");
-  -moz-context-properties: fill, fill-opacity, stroke; fill: none; stroke: currentColor;
-  width: 16px; height: 16px; opacity: 0.7; transition: opacity 0.15s, color 0.15s;
+  list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='context-fill' fill-opacity='context-fill-opacity'%3E%3Cpath d='M 398,81.84 A 227.4,227.4 0 0 0 255.82,32 C 194.9,32 138,55.47 95.46,98.09 54.35,139.33 31.82,193.78 32,251.37 a 215.66,215.66 0 0 0 35.65,118.76 l 0.19,0.27 c 0.28,0.41 0.57,0.82 0.86,1.22 0.29,0.4 0.65,0.92 0.73,1.05 l 0.22,0.4 c 1.13,2 2,4.44 1.23,6.9 l -18.42,66.66 a 29.13,29.13 0 0 0 -1.2,7.63 25.69,25.69 0 0 0 25.57,25.74 29.44,29.44 0 0 0 10.45,-2.29 l 67.49,-24.36 0.85,-0.33 a 14.75,14.75 0 0 1 5.8,-1.15 15.12,15.12 0 0 1 5.37,1 c 1.62,0.63 16.33,6.26 31.85,10.6 12.9,3.6 39.74,9 60.77,9 59.65,0 115.35,-23.1 156.83,-65.06 C 457.36,365.77 480,310.42 480,251.49 a 213.5,213.5 0 0 0 -4.78,-45 C 464.88,157.87 437.46,113.59 398,81.84 Z M 87.48,380 Z M 160,288 a 32,32 0 1 1 32,-32 32,32 0 0 1 -32,32 z m 96,0 a 32,32 0 1 1 32,-32 32,32 0 0 1 -32,32 z m 96,0 a 32,32 0 1 1 32,-32 32,32 0 0 1 -32,32 z'/%3E%3C/svg%3E");
+  -moz-context-properties: fill, fill-opacity; fill: currentColor; fill-opacity: 0.75;
+  width: 16px; height: 16px; transition: fill-opacity 0.15s, color 0.15s;
 }
-#dia-sidebar-urlbar:hover .urlbar-icon { opacity: 1; }
-#dia-sidebar-urlbar[open] .urlbar-icon { opacity: 1; color: var(--zen-primary-color, #2f6bff); }
+#dia-sidebar-urlbar:hover .urlbar-icon { fill-opacity: 1; }
+#dia-sidebar-urlbar[open] .urlbar-icon { fill-opacity: 1; color: var(--zen-primary-color, #2f6bff); }
 @media (prefers-color-scheme: dark) {
   #dia-dock { --fg: #f2f2f4; --bg: #19191b; --card: #242427; --accent: #7aa7ff; --danger: #ff7a7f; box-shadow: 0 0 0 0.5px rgba(255,255,255,0.06), 0 12px 32px rgba(0,0,0,0.5); }
 }
@@ -336,15 +368,23 @@
       .replace(/\/+$/, "")
       .replace(/^(https?:\/\/[^/]+)$/, provider() === "apple" ? "$1/v1" : "$1");
   const model = () =>
-    pref("model", "") || ({ anthropic: "claude-haiku-5-5", apple: "apple.local" }[provider()] || "gpt-4o-mini");
+    pref("model", "") || ({ anthropic: "claude-haiku-5-5", apple: "apple.local", gemini: "gemini-3.5-flash" }[provider()] || "gpt-4o-mini");
+  const isNative = () => provider() === "anthropic" || provider() === "gemini"; // has its own web-search tool and reads PDFs natively
+  const rawPdf = () => isNative(); // models that read PDF bytes directly
   const llmReady = () =>
-    provider() === "anthropic"
+    isNative()
       ? !!apiKey()
       : provider() === "apple" || !!apiKey() || /localhost|127\.0\.0\.1/.test(baseUrl());
   const isLocal = () => provider() === "apple" || /localhost|127\.0\.0\.1/.test(baseUrl());
   // Apple's on-device model has a tiny context (chunk hard); other local models handle far more.
   const chunkSize = () => parseInt(pref("maxchars", ""), 10) || (provider() === "apple" ? 6000 : isLocal() ? 16000 : MAX_CHARS);
-  const thinkBudget = () => (provider() === "anthropic" ? parseInt(pref("thinking", "0"), 10) || 0 : 0);
+  const thinkBudget = () => (isNative() ? parseInt(pref("thinking", "0"), 10) || 0 : 0);
+  // "auto": the model decides when to search. "manual": only when you turn Web on (globe button / @Web).
+  // Default = auto for Anthropic/Gemini (built-in tools), manual for others (they search the web from your browser).
+  const webMode = () => {
+    const v = pref("websearch", "default");
+    return v === "default" ? (isNative() ? "auto" : "manual") : v;
+  };
   const keepHistory = () => pref("savehistory", "true") !== "false";
   const systemPrompt = () => {
     const extra = pref("instructions", "").trim();
@@ -1093,44 +1133,82 @@
   }
 
   // ---------- model call ----------
-  // req = { system, pageBlock, messages, web }. Yields { t: "text" | "think" | "status", d }.
+  const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
+  const dedupeSources = (list) => {
+    const seen = new Set();
+    return list.filter((s) => s.url && !seen.has(s.url) && seen.add(s.url));
+  };
+  // req = { system, pageBlock, messages, web, forceWeb }.
+  // Yields { t: "text" | "think" | "status" | "query" | "sources", d }.
   async function* streamLLM(req, signal) {
-    const anthropic = provider() === "anthropic";
-    const url = anthropic ? "https://api.anthropic.com/v1/messages" : baseUrl() + "/chat/completions";
-    const headers = anthropic
-      ? {
-          "content-type": "application/json",
-          "x-api-key": apiKey(),
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        }
-      : { "content-type": "application/json", ...authHeaders() };
-    let body;
-    if (anthropic) {
+    const prov = provider();
+    const system = req.system + (req.web && req.forceWeb ? "\n\nThe user turned on web search: search the web for current information before answering." : "");
+    let url, headers, body;
+    if (prov === "anthropic") {
+      url = "https://api.anthropic.com/v1/messages";
+      headers = { "content-type": "application/json", "x-api-key": apiKey(), "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" };
       const think = thinkBudget();
-      const system = [{ type: "text", text: req.system }];
-      if (req.pageBlock) system.push({ type: "text", text: req.pageBlock, cache_control: { type: "ephemeral" } });
-      body = { model: model(), max_tokens: 4096 + (think >= 1024 ? think : 0), stream: true, system, messages: req.messages };
+      const sys = [{ type: "text", text: system }];
+      if (req.pageBlock) sys.push({ type: "text", text: req.pageBlock, cache_control: { type: "ephemeral" } });
+      body = { model: model(), max_tokens: 4096 + (think >= 1024 ? think : 0), stream: true, system: sys, messages: req.messages };
       if (think >= 1024) body.thinking = { type: "enabled", budget_tokens: think };
       if (req.web) body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }];
+    } else if (prov === "gemini") {
+      url = `${GEMINI_BASE}/models/${encodeURIComponent(model())}:streamGenerateContent?alt=sse`;
+      headers = { "content-type": "application/json", "x-goog-api-key": apiKey() };
+      const contents = [];
+      for (const m of req.messages) { // Gemini wants strictly alternating user/model turns
+        const role = m.role === "assistant" ? "model" : "user";
+        const parts = typeof m.content === "string" ? [{ text: m.content }] : m.content;
+        if (contents.at(-1)?.role === role) contents.at(-1).parts.push(...parts);
+        else contents.push({ role, parts: [...parts] });
+      }
+      body = { system_instruction: { parts: [{ text: system + (req.pageBlock ? "\n\n" + req.pageBlock : "") }] }, contents, generationConfig: { maxOutputTokens: 8192 } };
+      if (req.web) body.tools = [{ google_search: {} }];
+      const tb = thinkBudget();
+      // Gemini 2.x takes a token budget, Gemini 3.x a level (sending both is a 400)
+      if (tb) body.generationConfig.thinkingConfig = /gemini-2\./.test(model()) ? { thinkingBudget: tb, includeThoughts: true } : { thinkingLevel: tb <= 2048 ? "low" : "high", includeThoughts: true };
     } else {
-      body = {
-        model: model(), stream: true,
-        messages: [{ role: "system", content: req.system + (req.pageBlock ? "\n\n" + req.pageBlock : "") }, ...req.messages],
-      };
+      url = baseUrl() + "/chat/completions";
+      headers = { "content-type": "application/json", ...authHeaders() };
+      body = { model: model(), stream: true, messages: [{ role: "system", content: system + (req.pageBlock ? "\n\n" + req.pageBlock : "") }, ...req.messages] };
     }
-    let sawTool = false;
+    let sawTool = false, toolIdx = -1, toolBuf = "", gotText = false;
+    const results = [], cited = [], gemSrc = new Map(), seenQ = new Set();
     for await (const j of sseEvents(chunks(url, headers, JSON.stringify(body), signal))) {
-      if (anthropic) {
+      if (prov === "anthropic") {
         if (j.type === "error") throw new Error(j.error?.message || "API error");
         if (j.type === "content_block_start") {
-          const t = j.content_block?.type;
-          if (t === "server_tool_use") { sawTool = true; yield { t: "status", d: "Searching the web…" }; }
-          else if (t === "text" && sawTool) { sawTool = false; yield { t: "text", d: "\n\n" }; }
+          const cb = j.content_block || {};
+          if (cb.type === "server_tool_use") { sawTool = true; toolIdx = j.index; toolBuf = ""; yield { t: "status", d: "Searching the web…" }; }
+          else if (cb.type === "web_search_tool_result") { for (const r of Array.isArray(cb.content) ? cb.content : []) if (r.url) results.push({ title: r.title || "", url: r.url }); }
+          else if (cb.type === "text" && sawTool) { sawTool = false; yield { t: "text", d: "\n\n" }; }
         } else if (j.type === "content_block_delta") {
-          if (j.delta?.type === "thinking_delta" && j.delta.thinking) yield { t: "think", d: j.delta.thinking };
-          else if (j.delta?.type === "text_delta" && j.delta.text) yield { t: "text", d: j.delta.text };
+          const d = j.delta || {};
+          if (d.type === "thinking_delta" && d.thinking) yield { t: "think", d: d.thinking };
+          else if (d.type === "text_delta" && d.text) yield { t: "text", d: d.text };
+          else if (d.type === "input_json_delta" && j.index === toolIdx) toolBuf += d.partial_json || "";
+          else if (d.type === "citations_delta" && d.citation?.url) cited.push({ title: d.citation.title || "", url: d.citation.url });
+        } else if (j.type === "content_block_stop" && j.index === toolIdx) {
+          try { const q = JSON.parse(toolBuf).query; if (q) yield { t: "query", d: q }; } catch {}
+          toolIdx = -1; toolBuf = "";
         }
+      } else if (prov === "gemini") {
+        if (j.error) throw new Error(j.error.message || "Gemini API error");
+        if (j.promptFeedback?.blockReason) throw new Error("Gemini blocked this request (" + j.promptFeedback.blockReason + ")");
+        const c = j.candidates?.[0];
+        if (!c) continue;
+        for (const p of c.content?.parts || []) {
+          if (!p.text) continue;
+          if (!p.thought) gotText = true;
+          yield { t: p.thought ? "think" : "text", d: p.text };
+        }
+        const g = c.groundingMetadata;
+        if (g) {
+          for (const q of g.webSearchQueries || []) if (!seenQ.has(q)) { seenQ.add(q); yield { t: "query", d: q }; }
+          for (const ch of g.groundingChunks || []) if (ch.web?.uri) gemSrc.set(ch.web.uri, { title: ch.web.title || "", url: ch.web.uri });
+        }
+        if (c.finishReason && !gotText && !/^(STOP|MAX_TOKENS)$/.test(c.finishReason)) throw new Error("Gemini stopped without an answer (" + c.finishReason + ")");
       } else {
         if (j.error) throw new Error(j.error.message || "API error");
         const dl = j.choices?.[0]?.delta;
@@ -1140,6 +1218,9 @@
         if (dl.content) yield { t: "text", d: dl.content };
       }
     }
+    // sources: what the model actually cited if we know, otherwise everything it looked at
+    const src = prov === "gemini" ? [...gemSrc.values()] : dedupeSources(cited.length ? cited : results);
+    if (src.length) yield { t: "sources", d: src.slice(0, 8) };
   }
 
   // one non-streaming helper (used by the Skill builder)
@@ -1152,23 +1233,106 @@
   // user turn → API content: plain string, or parts when images / PDFs are attached
   function apiContent(text, files) {
     if (!files.length) return text;
-    const anthropic = provider() === "anthropic";
+    const prov = provider();
     const parts = [];
     for (const f of files) {
       if (f.kind === "image") {
-        parts.push(anthropic
-          ? { type: "image", source: { type: "base64", media_type: f.mime, data: f.b64 } }
+        parts.push(prov === "anthropic" ? { type: "image", source: { type: "base64", media_type: f.mime, data: f.b64 } }
+          : prov === "gemini" ? { inline_data: { mime_type: f.mime, data: f.b64 } }
           : { type: "image_url", image_url: { url: `data:${f.mime};base64,${f.b64}` } });
-      } else if (f.kind === "pdf" && anthropic) {
+      } else if (f.kind === "pdf" && prov === "anthropic") {
         parts.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: f.b64 } });
+      } else if (f.kind === "pdf" && prov === "gemini") {
+        parts.push({ inline_data: { mime_type: "application/pdf", data: f.b64 } });
       }
     }
-    parts.push({ type: "text", text });
+    parts.push(prov === "gemini" ? { text } : { type: "text", text });
     return parts;
   }
 
+  // ---------- web search for models without a built-in tool (Apple, OpenAI-compatible, Ollama…) ----------
+  // The model writes a query, we search from the browser, read the top pages, and hand the text back as
+  // numbered sources the model cites as [1], [2]…
+  async function fetchText(url, opts = {}, ms = 9000, signal) {
+    const c = new AbortController();
+    const timer = setTimeout(() => c.abort(), ms);
+    const onAbort = () => c.abort();
+    signal?.addEventListener("abort", onAbort);
+    try {
+      const res = await fetch(url, { credentials: "omit", redirect: "follow", ...opts, signal: c.signal });
+      return { ok: res.ok, status: res.status, ctype: res.headers?.get?.("content-type") || "", text: await res.text() };
+    } finally { clearTimeout(timer); signal?.removeEventListener("abort", onAbort); }
+  }
+  const stripTags = (s) => (s || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').trim();
+  function htmlToText(html) {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    doc.querySelectorAll("script,style,noscript,nav,header,footer,aside,form,svg,iframe").forEach((n) => n.remove());
+    const root = doc.querySelector("main, article, [role=main]") || doc.body;
+    return (root?.textContent || "").replace(/\s+/g, " ").trim();
+  }
+  async function webSearch(q, signal) {
+    const eng = pref("searchengine", "duckduckgo");
+    const enc = encodeURIComponent(q);
+    let results = [];
+    if (eng === "brave") {
+      const key = pref("searchkey", "").trim();
+      if (!key) throw new Error("Add your Brave Search API key in the mod's settings");
+      const r = await fetchText(`https://api.search.brave.com/res/v1/web/search?q=${enc}&count=6`, { headers: { Accept: "application/json", "X-Subscription-Token": key } }, 9000, signal);
+      if (!r.ok) throw new Error("Brave Search returned " + r.status);
+      results = (JSON.parse(r.text).web?.results || []).map((x) => ({ title: stripTags(x.title), url: x.url, snippet: stripTags(x.description) }));
+    } else if (eng === "searxng") {
+      const base = pref("searxurl", "").trim().replace(/\/+$/, "");
+      if (!base) throw new Error("Add your SearXNG address in the mod's settings");
+      const r = await fetchText(`${base}/search?q=${enc}&format=json`, {}, 9000, signal);
+      if (!r.ok) throw new Error("SearXNG returned " + r.status + " (JSON output must be enabled on the instance)");
+      results = (JSON.parse(r.text).results || []).map((x) => ({ title: x.title || "", url: x.url, snippet: x.content || "" }));
+    } else {
+      const r = await fetchText(`https://html.duckduckgo.com/html/?q=${enc}`, {}, 9000, signal);
+      const doc = new DOMParser().parseFromString(r.text, "text/html");
+      for (const el of doc.querySelectorAll(".result")) {
+        const a = el.querySelector("a.result__a");
+        if (!a || el.classList.contains("result--ad")) continue;
+        let href = a.getAttribute("href") || "";
+        const m = href.match(/[?&]uddg=([^&]+)/);
+        if (m) href = decodeURIComponent(m[1]);
+        if (href.startsWith("//")) href = "https:" + href;
+        if (!/^https?:\/\//.test(href)) continue;
+        results.push({ title: a.textContent.trim(), url: href, snippet: el.querySelector(".result__snippet")?.textContent.trim() || "" });
+        if (results.length >= 6) break;
+      }
+    }
+    results = results.filter((r) => /^https?:\/\//.test(r.url)).slice(0, 6);
+    if (!results.length) throw new Error(eng === "duckduckgo" ? "DuckDuckGo gave no results (it may be rate-limiting). Brave or SearXNG can be set in the mod's settings." : "The search returned no results");
+    return results;
+  }
+  async function readSources(results, signal, cap) {
+    await Promise.all(results.slice(0, 3).map(async (r) => {
+      try {
+        const res = await fetchText(r.url, {}, 7000, signal);
+        if (res.ok && /html|text/.test(res.ctype)) r.text = htmlToText(res.text).slice(0, cap);
+      } catch {}
+    }));
+  }
+  const webBlock = (q, results, cap) =>
+    `=== WEB SEARCH RESULTS for "${q}" ===\n` +
+    results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${(r.text || r.snippet || "").slice(0, cap)}`).join("\n\n") +
+    "\n\nUse these results for facts beyond the page. Cite sources inline as [1], [2] right after the claims they support. Never cite a source that isn't listed.";
+  // asks the model whether to search; returns the query, or "" for no search
+  async function planSearch(convo, page, forced, signal) {
+    const last = [...convo].reverse().find((m) => m.role === "user");
+    const msg = (last?.label || last?.content || "").slice(0, 400);
+    const recent = convo.slice(-5, -1).map((m) => `${m.role}: ${(m.label || m.content || "").slice(0, 200)}`).join("\n");
+    const ctx = `Today is ${new Date().toDateString()}.\n` + (page?.title ? `Page: ${page.title}\n` : "") + (recent ? `Recent chat:\n${recent}\n` : "") + `User message: ${msg}`;
+    let out = "";
+    try { out = await askOnce(forced ? ROUTER_FORCED : ROUTER_SYSTEM, ctx, signal); } catch (e) { if (e.name === "AbortError") throw e; }
+    const m = out.match(/SEARCH:\s*(.+)/i);
+    const q = (m?.[1] || "").trim().replace(/^["“'`]+|["”'`.]+$/g, "").slice(0, 200);
+    if (q) return q;
+    return forced ? msg.replace(/\s+/g, " ").slice(0, 200) : "";
+  }
+
   // ---------- markdown -> DOM ----------
-  const INLINE_RE = /(\*\*[^*]+\*\*|`[^`]+`|~~[^~]+~~|\*[^*\s][^*]*\*|\[[^\]]+\]\([^)]+\)|https?:\/\/[^\s<>()]+)/;
+  const INLINE_RE = /(\*\*[^*]+\*\*|`[^`]+`|~~[^~]+~~|\*[^*\s][^*]*\*|\[[^\]]+\]\([^)]+\)|\[\d{1,2}\]|https?:\/\/[^\s<>()]+)/;
   const linkEl = (url, text) => {
     const u = url.replace(/[.,;:]+$/, "");
     const a = h("a", {
@@ -1181,12 +1345,17 @@
   };
 
   // seek is an optional (seconds) => void; when given, [mm:ss] / mm:ss become clickable jump links
-  const inline = (s, seek) =>
+  const citeEl = (src, n) => h("a", { className: "dia-cite", href: "#", textContent: String(n), title: (src.title ? src.title + "\n" : "") + src.url,
+    onclick: (e) => { e.preventDefault(); e.stopPropagation(); openLink(src.url); } });
+  // cites: numbered web sources so a bare [1] becomes a clickable chip
+  const inline = (s, seek, cites) =>
     s.split(INLINE_RE).filter(Boolean).flatMap((t) => {
-      if (t.startsWith("**") && t.endsWith("**") && t.length > 4) return [h("strong", {}, ...inline(t.slice(2, -2), seek))];
+      if (t.startsWith("**") && t.endsWith("**") && t.length > 4) return [h("strong", {}, ...inline(t.slice(2, -2), seek, cites))];
       if (t.startsWith("`") && t.endsWith("`") && t.length > 2) return [h("code", { textContent: t.slice(1, -1) })];
       if (t.startsWith("~~") && t.endsWith("~~") && t.length > 4) return [h("del", { textContent: t.slice(2, -2) })];
-      if (t.length > 2 && t[0] === "*" && t.endsWith("*") && t[1] !== "*") return [h("em", {}, ...inline(t.slice(1, -1), seek))];
+      if (t.length > 2 && t[0] === "*" && t.endsWith("*") && t[1] !== "*") return [h("em", {}, ...inline(t.slice(1, -1), seek, cites))];
+      const cm = t.match(/^\[(\d{1,2})\]$/);
+      if (cm) { const src = cites?.[+cm[1] - 1]; return [src ? citeEl(src, cm[1]) : document.createTextNode(t)]; }
       const md = t.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
       if (md) return [linkEl(md[2], md[1])];
       if (/^https?:\/\//.test(t)) return [linkEl(t, t.replace(/^https?:\/\/(www\.)?/, "").slice(0, 48))];
@@ -1217,7 +1386,7 @@
   const TABLE_SEP = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
   const splitRow = (ln) => ln.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
 
-  function renderMd(el, text, seek, fadeStart = Infinity) {
+  function renderMd(el, text, seek, fadeStart = Infinity, cites = null) {
     el.replaceChildren();
     const lines = text.split("\n");
     const starts = [];
@@ -1226,9 +1395,9 @@
     // wrap only the characters newer than `fadeStart` so each freshly streamed slice eases in
     const frag = (content, cStart) => {
       const from = fadeStart === Infinity ? Infinity : Math.max(0, fadeStart - cStart);
-      if (from >= content.length) return inline(content, seek);
-      if (from <= 0) return [h("span", { className: "dia-chunk-in" }, ...inline(content, seek))];
-      return [...inline(content.slice(0, from), seek), h("span", { className: "dia-chunk-in" }, ...inline(content.slice(from), seek))];
+      if (from >= content.length) return inline(content, seek, cites);
+      if (from <= 0) return [h("span", { className: "dia-chunk-in" }, ...inline(content, seek, cites))];
+      return [...inline(content.slice(0, from), seek, cites), h("span", { className: "dia-chunk-in" }, ...inline(content.slice(from), seek, cites))];
     };
     const stack = []; // open (possibly nested) lists: { indent, tag, el, lastLi }
     let i = 0;
@@ -1256,8 +1425,8 @@
         while (j < lines.length && lines[j].includes("|") && lines[j].trim()) rows.push(splitRow(lines[j++]));
         const tsv = [head, ...rows].map((r) => r.join("\t")).join("\n");
         const table = h("table", {},
-          h("thead", {}, h("tr", {}, ...head.map((c) => h("th", {}, ...inline(c, seek))))),
-          h("tbody", {}, ...rows.map((r) => h("tr", {}, ...head.map((_, k) => h("td", {}, ...inline(r[k] || "", seek)))))));
+          h("thead", {}, h("tr", {}, ...head.map((c) => h("th", {}, ...inline(c, seek, cites))))),
+          h("tbody", {}, ...rows.map((r) => h("tr", {}, ...head.map((_, k) => h("td", {}, ...inline(r[k] || "", seek, cites)))))));
         el.append(h("div", { className: "dia-table" }, h("div", { className: "dia-code-head" }, h("span", { textContent: "table" }), copyBtn(() => tsv)), h("div", { className: "dia-table-scroll" }, table)));
         i = j;
         continue;
@@ -1457,7 +1626,7 @@
     let panel, logEl, input, sendBtn, pillsEl, composerEl, titleEl, sheetEl = null;
     let started = false, busy = false, generating = false, stopped = false, closed = false, userHidden = false, wantFocus = false;
     let page = null, convo = [], refs = [], ctrl = null, gen = 0, refSeq = 0, chatId = null, chatTitle = "";
-    let usePage = true, skill = null, formats = [], manage = false, web = false;
+    let usePage = true, skill = null, formats = [], manage = false, webOn = false; // webOn: the globe button
     let queue = [], drainAfter = false, tabSnap = [], lastKey = "";
     let members = [src]; // all tabs this chat spans — >1 when opened over a split view
     let self = null, noteEl = null, noteTimer = null, pop = null;
@@ -1537,10 +1706,10 @@
       if (skill) els.push(pill({ label: skill.name, ico: "spark" }, () => { skill = null; renderPills(); }, "dia-skillpill"));
       for (const f of formats) els.push(pill({ label: "@" + f.name, ico: "edit", tip: f.hint }, () => { formats = formats.filter((x) => x !== f); renderPills(); }));
       if (manage) els.push(pill({ label: "Manage tabs", ico: "folder" }, () => { manage = false; renderPills(); }));
-      if (web) els.push(pill({ label: "Web search", ico: "search" }, () => { web = false; renderPills(); }));
       pillsEl.replaceChildren(...els);
       if (input) input.placeholder = isVid() && usePage ? "Ask about this video…" : usePage && pd ? "Ask about this page…" : "Ask anything…";
       updateSend();
+      updateWebBtn();
     }
 
     function addRef(text) {
@@ -1625,7 +1794,7 @@
 
     // a PDF's bytes: Anthropic reads them natively (text + figures); other providers get extracted text
     async function addPdfBuffer(buf, name, url) {
-      if (provider() === "anthropic") {
+      if (rawPdf()) {
         const dataUrl = await readDataUrl(new Blob([buf], { type: "application/pdf" }));
         clearNote();
         addContext({ kind: "pdf", label: name, url, mime: "application/pdf", b64: dataUrl.split(",")[1], text: "[PDF: " + name + "]" });
@@ -1633,7 +1802,7 @@
       }
       flashNote("Reading PDF…", true);
       const text = await pdfText(buf);
-      if (!text) { flashNote("Couldn't read that PDF's text (PDFs work best with the Anthropic provider)."); return false; }
+      if (!text) { flashNote("Couldn't read that PDF's text (PDFs work best with Anthropic or Gemini)."); return false; }
       clearNote();
       addContext({ kind: "file", label: name, url, text: text.slice(0, 24000) });
       return true;
@@ -1778,10 +1947,7 @@
     const toolItems = (q) => {
       const out = [];
       if (!q || "tabs".startsWith(q) || "manage".startsWith(q)) out.push({ label: "@Tabs", ico: "folder", sub: "Manage open tabs", run: () => { manage = true; renderPills(); } });
-      if (!q || "web".startsWith(q) || "search".startsWith(q)) out.push({ label: "@Web", ico: "search", sub: provider() === "anthropic" ? "Search the web" : "needs Anthropic", run: () => {
-        if (provider() !== "anthropic") { flashNote("Web search needs the Anthropic provider (set it in the mod's settings)."); return; }
-        web = true; renderPills();
-      } });
+      if (webMode() !== "off" && (!q || "web".startsWith(q) || "search".startsWith(q))) out.push({ label: "@Web", ico: "globe", sub: "Search the web", run: () => { setWeb(true); } });
       return out;
     };
     function slashMenu(start, q) {
@@ -1827,6 +1993,21 @@
       if (m) return atMenu(caret - m[1].length - 1, m[1].toLowerCase());
       if (pop && pop.trigger !== "plus") closePop();
     }
+    // the globe button: searches the web for this chat (in "auto" mode Anthropic/Gemini already decide on their own)
+    let webBtn = null;
+    function updateWebBtn() {
+      if (!webBtn) return;
+      const mode = webMode();
+      webBtn.hidden = mode === "off";
+      webBtn.classList.toggle("dia-on", webOn);
+      webBtn.title = webOn ? "Web search is on for this chat (click to turn off)"
+        : mode === "auto" ? "Web search: automatic. Click to always search" : "Web search is off. Click to turn on";
+    }
+    function setWeb(on) {
+      webOn = !!on;
+      updateWebBtn();
+      if (webOn) flashNote("Web search is on for this chat.");
+    }
     function pickSkill(s) { skill = s; renderPills(); focusInput(); }
 
     // ----- request building -----
@@ -1835,7 +2016,7 @@
       : r.kind === "clip" ? "TEXT THE USER PASTED IN"
       : r.kind === "file" || r.kind === "pdf" ? `FILE THE USER ATTACHED (${r.label})`
       : "TEXT THE USER SELECTED ON THE PAGE";
-    const sendsRaw = (r) => r.kind === "image" || (r.kind === "pdf" && provider() === "anthropic"); // sent as image/document blocks
+    const sendsRaw = (r) => r.kind === "image" || (r.kind === "pdf" && rawPdf()); // sent as image/document blocks
     // the text a user turn carries: the request, @format hints, attached tabs/files/selections, tab list
     function userText(m, withTabs) {
       const apple = provider() === "apple";
@@ -1852,7 +2033,7 @@
     }
     // Every request is rebuilt from scratch. Cloud/large models get the page in the system prompt plus
     // real multi-turn history. Apple's tiny on-device model ignores history, so it gets one flattened turn.
-    function buildRequest(resuming) {
+    function buildRequest(resuming, webCtx) {
       const lastU = [...convo].reverse().find((m) => m.role === "user");
       const req = lastU?.content || pref("prompt", DEFAULT_PROMPT);
       let ctx = page && !page.none ? (page.context ?? page.text.slice(0, chunkSize())) : "";
@@ -1870,6 +2051,7 @@
           system: systemPrompt(), pageBlock: "", web: false,
           messages: [{ role: "user", content:
             (pageBlock ? "Use the web page below to respond to the user's request. Be concise.\n\n" + pageBlock + "\n\n" : "") +
+            (webCtx ? webCtx.text + "\n\n" : "") +
             (transcript ? `=== CONVERSATION SO FAR ===\n${transcript}\n\n` : "") + `=== REQUEST ===\n${ask}` }],
         };
       }
@@ -1878,7 +2060,9 @@
         : { role: "user", content: apiContent(userText(m, m === lastU), (m.refs || []).filter(sendsRaw)) });
       while (msgs[0]?.role === "assistant") msgs.shift();
       if (resuming) msgs.push({ role: "user", content: "Continue exactly where you stopped. Do not repeat what you already wrote." });
-      return { system: systemPrompt(), pageBlock, messages: msgs, web: !!lastU?.web && provider() === "anthropic" };
+      const forced = !!lastU?.web;
+      const nativeWeb = isNative() && webMode() !== "off" && (webMode() === "auto" || forced); // Anthropic/Gemini run their own search
+      return { system: systemPrompt(), pageBlock: [pageBlock, webCtx?.text].filter(Boolean).join("\n\n"), messages: msgs, web: nativeWeb, forceWeb: forced };
     }
 
     // ----- messages in the log -----
@@ -1928,6 +2112,26 @@
     }
 
     const blockEntry = new WeakMap(); // answer block -> its message in `convo`
+    const citesOf = (m) => (m?.numbered ? m.sources : null); // numbered sources behind [1], [2]… citations
+    // "Searched “…”" plus a chip per source (numbered when the answer cites them as [n])
+    function sourcesRow(m) {
+      const src = m?.sources || [], qs = m?.queries || [];
+      if (!src.length && !qs.length) return null;
+      const row = h("div", { className: "dia-sources" });
+      if (qs.length) row.append(h("span", { className: "dia-searched" }, icon("search"), `Searched “${qs[0]}”` + (qs.length > 1 ? ` +${qs.length - 1}` : "")));
+      src.slice(0, 6).forEach((s, i) => {
+        const host = hostOf(s.url);
+        const redirect = /vertexaisearch|googleusercontent/.test(host); // Gemini links go through Google; its title is the real domain
+        const label = redirect ? s.title || host : host || s.title;
+        const fav = redirect ? (/^[\w.-]+\.[a-z]{2,}$/i.test(s.title || "") ? "page-icon:https://" + s.title : "") : "page-icon:" + s.url;
+        row.append(h("a", { className: "dia-src", href: "#", title: `${s.title || ""}\n${s.url}`, onclick: (e) => { e.preventDefault(); openLink(s.url); } },
+          ...(m.numbered ? [h("b", { textContent: String(i + 1) })] : []),
+          ...(fav ? [h("img", { className: "dia-fav", src: fav, onerror: (e) => e.target.remove() })] : []),
+          h("span", { textContent: label })));
+      });
+      if (src.length > 6) row.append(h("span", { className: "dia-searched", textContent: `+${src.length - 6}` }));
+      return row;
+    }
     const seekFn = () => (page?.youtube && ytId(page.url) === ytId(srcUrl() || "") ? (s) => seekVideo(src.linkedBrowser, s) : null);
     function actionsRow(block, partial) {
       const mini = (ico, label, fn) => h("button", { className: "dia-mini", title: label, onclick: fn }, icon(ico), label);
@@ -1951,7 +2155,7 @@
         if (!v) return;
         entry.content = v; entry.partial = false;
         const { text } = extractActions(v);
-        renderMd(answerEl, text, seekFn());
+        renderMd(answerEl, text, seekFn(), Infinity, citesOf(entry));
         block.querySelector(".dia-mini[title=Resume]")?.remove();
         done();
         saveChat();
@@ -2003,7 +2207,7 @@
           h("span", { textContent: q.label }),
           h("button", { className: "dia-mini", textContent: "Edit", title: "Pull this back into the message box", onclick: () => {
             queue = queue.filter((x) => x !== q); renderQueue();
-            refs = [...q.refs, ...refs]; skill = q.skill || null; formats = q.formats; manage = q.manage; web = q.web;
+            refs = [...q.refs, ...refs]; skill = q.skill || null; formats = q.formats; manage = q.manage;
             input.value = q.raw || ""; autosize(); renderPills(); focusInput();
           } }),
           h("button", { className: "dia-mini", textContent: "Send now", title: "Stop the current answer and send this now", onclick: () => { queue = [q, ...queue.filter((x) => x !== q)]; renderQueue(); stop(true); } }),
@@ -2030,6 +2234,7 @@
       const block = opts.block || h("div", { className: "dia-msg dia-ai" });
       block.classList.add("dia-streaming");
       block.querySelector(".dia-actions")?.remove();
+      block.querySelector(".dia-sources")?.remove();
       let answerEl = block.querySelector(".dia-answer");
       if (!answerEl) { answerEl = h("div", { className: "dia-answer" }); block.append(answerEl); }
       let dots = h("div", { className: "dia-dots" }, h("i"), h("i"), h("i")); // "thinking" until the first token
@@ -2039,6 +2244,9 @@
       scrollDown(true);
       let acc = prior ? prior.content : "";
       let failed = false, thinkEl = null, thinkBody = null, thinkAcc = "", statusEl = null;
+      let webCtx = prior?.webText ? { text: prior.webText } : null, searchInfo = null; // fallback web search (models without a built-in tool)
+      let cites = citesOf(prior);
+      const qset = new Set(), srcMap = new Map();
       const t0 = Date.now();
       const seek = isVid() ? seekFn() : null;
       const wantTs = /\btimestamp|\bmoment|\bchapter|time ?code|mm:ss|\bjump to\b/i.test([...convo].reverse().find((m) => m.role === "user")?.content || "");
@@ -2072,7 +2280,7 @@
         if (end <= shown) return;
         dropDots();
         const stick = nearBottom();
-        renderMd(answerEl, acc.slice(0, end), seek, shown);
+        renderMd(answerEl, acc.slice(0, end), seek, shown, cites);
         shown = end;
         if (stick) scrollDown(false);
       };
@@ -2083,11 +2291,11 @@
       };
       const finalRender = (text) => {
         const { text: body, actions } = extractActions(text);
-        renderMd(answerEl, body, seek); // final solid pass, no fade boundary
+        renderMd(answerEl, body, seek, Infinity, cites); // final solid pass, no fade boundary
         block.querySelector(".dia-act")?.remove();
         if (actions) { const card = actionCard(actions); if (card) block.append(card); }
       };
-      if (prior) renderMd(answerEl, acc, seek);
+      if (prior) renderMd(answerEl, acc, seek, Infinity, cites);
       try {
         if (!llmReady()) {
           dropDots();
@@ -2095,9 +2303,31 @@
           renderMd(answerEl, acc, seek);
           answerEl.append(h("div", { className: "dia-note", textContent: "Offline summary. Add an API key (or a local model) in the mod settings for AI answers." }));
         } else {
-          for await (const ev of streamLLM(buildRequest(!!prior), signal)) {
+          const lastU = [...convo].reverse().find((m) => m.role === "user");
+          if (!prior && !isNative() && webMode() !== "off" && (lastU?.web || (webMode() === "auto" && !lastU?.fromSkill))) {
+            try { // read the web from the browser: plan a query, search, read the top pages
+              const q = await planSearch(convo, page, !!lastU?.web, signal);
+              if (q) {
+                const cap = provider() === "apple" ? 900 : 3500;
+                setStatus(`Searching the web for “${q}”…`);
+                const results = await webSearch(q, signal);
+                setStatus("Reading sources…");
+                await readSources(results, signal, cap);
+                webCtx = { text: webBlock(q, results, cap) };
+                searchInfo = { query: q, sources: results.map((r) => ({ title: r.title, url: r.url })) };
+                cites = searchInfo.sources;
+              }
+            } catch (e) {
+              if (e.name === "AbortError") throw e;
+              clearStatus();
+              block.insertBefore(h("div", { className: "dia-note", textContent: "Couldn't search the web: " + e.message }), answerEl);
+            }
+          }
+          for await (const ev of streamLLM(buildRequest(!!prior, webCtx), signal)) {
             if (ev.t === "think") { onThink(ev.d); continue; }
             if (ev.t === "status") { setStatus(ev.d); continue; }
+            if (ev.t === "query") { qset.add(ev.d); continue; }
+            if (ev.t === "sources") { for (const s of ev.d) srcMap.set(s.url, s); continue; }
             endThink(); clearStatus();
             acc = acc.length > 20 && ev.d.startsWith(acc) ? ev.d : acc + ev.d; // tolerate cumulative streams
             const now = Date.now();
@@ -2138,11 +2368,20 @@
         let entry = prior;
         if (prior) { prior.content = acc; prior.partial = stopped; }
         else { entry = { role: "assistant", content: acc, partial: stopped }; convo.push(entry); }
+        const sources = searchInfo ? searchInfo.sources : [...srcMap.values()];
+        const queries = searchInfo ? [searchInfo.query] : [...qset];
+        if (sources.length) { entry.sources = sources; entry.numbered = !!searchInfo; }
+        if (queries.length) entry.queries = queries;
+        if (webCtx) entry.webText = webCtx.text; // kept in memory so Resume doesn't search again
         blockEntry.set(block, entry);
       }
       dropDots();
       block.classList.remove("dia-streaming");
-      if (acc && !failed) block.append(actionsRow(block, stopped));
+      if (acc && !failed) {
+        const srow = sourcesRow(blockEntry.get(block));
+        if (srow) block.append(srow);
+        block.append(actionsRow(block, stopped));
+      }
       setBusy(false);
       scrollDown(true);
       saveChat();
@@ -2219,7 +2458,7 @@
         label = label || (q ? `${sk.name}: ${q}` : sk.name);
         q = q ? `${base}\n\nUser's additional input: ${q}` : base;
       } else if (!q) q = "Explain this.";
-      return { q, label: label || q, raw: opts.text !== undefined ? "" : input.value.trim(), skill: sk, refs, formats, manage, web, usePage: usePage && !!srcUrl() };
+      return { q, label: label || q, raw: opts.text !== undefined ? "" : input.value.trim(), skill: sk, fromSkill: !!sk || !!opts.label, refs, formats, manage, web: webOn, usePage: usePage && !!srcUrl() };
     }
     function submit(opts = {}) {
       if (opts.text === undefined && !skill) { // typing a skill's name and pressing Return runs it, no slash needed
@@ -2230,7 +2469,7 @@
       const snap = snapshot(opts);
       if (!snap) return;
       if (opts.text === undefined) { input.value = ""; autosize(); }
-      refs = []; skill = null; formats = []; manage = false; web = false; // the composer empties (snapshot keeps the old ones)
+      refs = []; skill = null; formats = []; manage = false; // the composer empties (snapshot keeps the old ones)
       closePop();
       if (busy) { queue.push(snap); renderQueue(); renderPills(); return; }
       dispatch(snap);
@@ -2239,7 +2478,7 @@
       logEl.querySelector(".dia-empty")?.remove();
       const pageAtt = !started && snap.usePage ? pageData() : null;
       started = true;
-      const entry = { role: "user", content: snap.q, label: snap.label, refs: snap.refs, formats: snap.formats.map((f) => f.id), manage: snap.manage, web: snap.web };
+      const entry = { role: "user", content: snap.q, label: snap.label, refs: snap.refs, formats: snap.formats.map((f) => f.id), manage: snap.manage, web: snap.web, fromSkill: snap.fromSkill };
       logEl.append(userMsg(entry, pageAtt));
       if (!chatTitle) { chatTitle = snap.label.slice(0, 60); updateTitle(); }
       if (snap.manage) tabSnap = snapshotTabs();
@@ -2264,7 +2503,7 @@
         page: page && !page.none ? { title: page.title, url: page.url, text: page.text.slice(0, 20000), youtube: !!page.youtube, seconds: page.seconds, chapters: page.chapters } : null,
         msgs: convo.map((m) => m.role === "user"
           ? { role: "user", content: m.content, label: m.label, formats: m.formats, refs: (m.refs || []).map(strip) }
-          : { role: "assistant", content: m.content }),
+          : { role: "assistant", content: m.content, sources: m.sources, queries: m.queries, numbered: m.numbered }),
       });
     }
     function loadChat(c) {
@@ -2279,8 +2518,10 @@
       for (const m of convo) {
         if (m.role === "user") { logEl.append(userMsg(m, null)); continue; }
         const block = h("div", { className: "dia-msg dia-ai" }, h("div", { className: "dia-answer" }));
-        renderMd(block.firstChild, extractActions(m.content).text, seek);
+        renderMd(block.firstChild, extractActions(m.content).text, seek, Infinity, citesOf(m));
         blockEntry.set(block, m);
+        const srow = sourcesRow(m);
+        if (srow) block.append(srow);
         block.append(actionsRow(block, !!m.partial));
         logEl.append(block);
       }
@@ -2391,7 +2632,7 @@
       ctrl?.abort();
       gen++;
       page = null; convo = []; refs = []; queue = []; started = false; generating = false;
-      chatId = null; chatTitle = ""; usePage = !!srcUrl(); skill = null; formats = []; manage = false; web = false;
+      chatId = null; chatTitle = ""; usePage = !!srcUrl(); skill = null; formats = []; manage = false; webOn = false;
       closePop(); closeSheet(); clearNote();
       if (input) { input.value = ""; autosize(); }
       logEl.replaceChildren();
@@ -2454,7 +2695,9 @@
       sendBtn.addEventListener("mousedown", (e) => e.preventDefault()); // keep typing focus in the box after sending
       const addBtn = h("button", { className: "dia-icon dia-add", title: "Attach files, add tabs, Skills", onclick: (e) => { e.stopPropagation(); plusMenu(); } }, icon("plus"));
       addBtn.addEventListener("mousedown", (e) => e.preventDefault());
-      composerEl = h("div", { className: "dia-composer" }, pillsEl, input, h("div", { className: "dia-row" }, addBtn, sendBtn));
+      webBtn = h("button", { className: "dia-icon dia-add dia-web", onclick: (e) => { e.stopPropagation(); setWeb(!webOn); } }, icon("globe"));
+      webBtn.addEventListener("mousedown", (e) => e.preventDefault());
+      composerEl = h("div", { className: "dia-composer" }, pillsEl, input, h("div", { className: "dia-row" }, h("div", { className: "dia-row-left" }, addBtn, webBtn), sendBtn));
       const dropzone = h("div", { className: "dia-dropzone" }, icon("drop"), h("span", { textContent: "Drop to add as context" }), h("small", { textContent: "Files, tabs or tab groups" }));
       panel = h("div", { className: "dia-panel", hidden: true }, head, logEl, h("div", { className: "dia-foot" }, composerEl), dropzone);
       // drag files, tabs (from the tab strip or Zen's sidebar) or whole tab groups onto the sidebar
@@ -2694,4 +2937,18 @@
     },
   };
   console.log(`[dia-sidebar] loaded v${VERSION} (copy #${COPY} in this window${COPY > 1 ? " — older copies disabled" : ""})`);
+  };
+
+  // Sine runs scripts at the window's "load" event, which can be before the browser UI is built. Wait for it.
+  (function boot(n) {
+    let ready = false;
+    try { ready = typeof gBrowser !== "undefined" && !!gBrowser?.tabContainer && !!document.getElementById("tabbrowser-tabpanels"); } catch (e) {}
+    if (ready) {
+      try { diaMain(); } catch (e) { console.error("[dia-sidebar] failed to start:", e); }
+    } else if (n < 160) {
+      setTimeout(() => boot(n + 1), 250);
+    } else {
+      console.error("[dia-sidebar] gave up waiting for the browser window to finish loading");
+    }
+  })(0);
 })();
