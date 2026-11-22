@@ -1,189 +1,82 @@
 [
   {
+    "type": "separator",
+    "label": "**AI model**"
+  },
+  {
     "property": "mod.dia-sidebar.provider",
-    "label": "AI provider (Apple Intelligence needs no key; leave the key empty for others to use the offline summarizer)",
+    "label": "Provider",
     "type": "dropdown",
-    "default": "apple",
     "defaultValue": "apple",
+    "placeholder": false,
     "options": [
       {
-        "label": "Apple Intelligence (afm-server, on-device)",
+        "label": "Apple Intelligence (on-device, no key)",
         "value": "apple"
       },
       {
-        "label": "Anthropic (Claude)",
+        "label": "Anthropic Claude",
         "value": "anthropic"
       },
       {
-        "label": "Google Gemini (native API: web search, PDFs, images)",
+        "label": "Google Gemini",
         "value": "gemini"
       },
       {
-        "label": "OpenAI-compatible (OpenAI, Groq, Ollama, Gemini's compatibility endpoint...)",
+        "label": "OpenAI-compatible (OpenAI, Groq, Ollama)",
         "value": "openai"
       }
     ]
   },
   {
     "property": "mod.dia-sidebar.apikey",
-    "label": "API key (Anthropic, Gemini, or OpenAI-compatible; for afm-server only if its Settings show a key)",
+    "label": "API key",
     "type": "string",
-    "default": "",
-    "defaultValue": ""
-  },
-  {
-    "property": "mod.dia-sidebar.applebase",
-    "label": "afm-server URL (Apple Intelligence provider)",
-    "type": "string",
-    "default": "http://127.0.0.1:11435/v1",
-    "defaultValue": "http://127.0.0.1:11435/v1"
+    "defaultValue": "",
+    "placeholder": "Paste your key here",
+    "conditions": [
+      {
+        "not": {
+          "property": "mod.dia-sidebar.provider",
+          "value": "apple"
+        }
+      }
+    ]
   },
   {
     "property": "mod.dia-sidebar.model",
-    "label": "Model (blank = provider default: claude-haiku-5-5, gemini-3.5-flash, apple.local, gpt-4o-mini)",
+    "label": "Model",
     "type": "string",
-    "default": "",
-    "defaultValue": ""
+    "defaultValue": "",
+    "placeholder": "Leave blank for the best default (Gemini: newest Flash)"
   },
   {
-    "property": "mod.dia-sidebar.baseurl",
-    "label": "OpenAI-compatible base URL (OpenAI-compatible provider only)",
+    "property": "mod.dia-sidebar.server",
+    "label": "Server address",
     "type": "string",
-    "default": "https://api.openai.com/v1",
-    "defaultValue": "https://api.openai.com/v1"
-  },
-  {
-    "property": "mod.dia-sidebar.width",
-    "label": "Sidebar width (px). You can also drag its left edge; double-click the edge to reset",
-    "type": "string",
-    "default": "400",
-    "defaultValue": "400"
-  },
-  {
-    "property": "mod.dia-sidebar.instructions",
-    "label": "Custom instructions, sent with every chat (tone, language, things to always or never do)",
-    "type": "string",
-    "default": "",
-    "defaultValue": ""
-  },
-  {
-    "property": "mod.dia-sidebar.prompt",
-    "label": "Summary instruction (used by the Summarize skill and auto-summarize)",
-    "type": "string",
-    "default": "Summarize this page into concise bullet points.",
-    "defaultValue": "Summarize this page into concise bullet points."
-  },
-  {
-    "property": "mod.dia-sidebar.maxchars",
-    "label": "Page text sent to the model, in characters (blank = automatic)",
-    "type": "string",
-    "default": "",
-    "defaultValue": ""
-  },
-  {
-    "property": "mod.dia-sidebar.autosummarize",
-    "label": "Summarize automatically when the sidebar opens",
-    "type": "dropdown",
-    "default": "youtube",
-    "defaultValue": "youtube",
-    "options": [
+    "defaultValue": "",
+    "placeholder": "Leave blank for the default",
+    "conditions": [
       {
-        "label": "Only on YouTube videos",
-        "value": "youtube"
+        "if": {
+          "property": "mod.dia-sidebar.provider",
+          "value": "apple"
+        }
       },
       {
-        "label": "Always",
-        "value": "true"
-      },
-      {
-        "label": "Never: open an empty chat",
-        "value": "false"
+        "if": {
+          "property": "mod.dia-sidebar.provider",
+          "value": "openai"
+        }
       }
     ]
-  },
-  {
-    "property": "mod.dia-sidebar.yttimestamps",
-    "label": "On YouTube, keep [mm:ss] timestamps in the transcript (lets the model cite key moments)",
-    "type": "dropdown",
-    "default": "true",
-    "defaultValue": "true",
-    "options": [
-      {
-        "label": "Yes: timestamped transcript",
-        "value": "true"
-      },
-      {
-        "label": "No: plain transcript",
-        "value": "false"
-      }
-    ]
-  },
-  {
-    "property": "mod.dia-sidebar.websearch",
-    "label": "Web search (the globe button and @Web always work unless this is Off)",
-    "type": "dropdown",
-    "default": "default",
-    "defaultValue": "default",
-    "options": [
-      {
-        "label": "Default: automatic with Anthropic/Gemini, on request with other providers",
-        "value": "default"
-      },
-      {
-        "label": "Automatic: the model decides (other providers do an extra quick check per message)",
-        "value": "auto"
-      },
-      {
-        "label": "Only when I turn on the globe button or use @Web",
-        "value": "manual"
-      },
-      {
-        "label": "Off",
-        "value": "off"
-      }
-    ]
-  },
-  {
-    "property": "mod.dia-sidebar.searchengine",
-    "label": "Search engine for providers without built-in search (Apple, OpenAI-compatible)",
-    "type": "dropdown",
-    "default": "duckduckgo",
-    "defaultValue": "duckduckgo",
-    "options": [
-      {
-        "label": "DuckDuckGo (no key; can rate-limit)",
-        "value": "duckduckgo"
-      },
-      {
-        "label": "Brave Search (API key)",
-        "value": "brave"
-      },
-      {
-        "label": "SearXNG (your own instance)",
-        "value": "searxng"
-      }
-    ]
-  },
-  {
-    "property": "mod.dia-sidebar.searchkey",
-    "label": "Brave Search API key (only if Brave is selected above)",
-    "type": "string",
-    "default": "",
-    "defaultValue": ""
-  },
-  {
-    "property": "mod.dia-sidebar.searxurl",
-    "label": "SearXNG address, e.g. https://searx.example.org (JSON output must be enabled; only if SearXNG is selected)",
-    "type": "string",
-    "default": "",
-    "defaultValue": ""
   },
   {
     "property": "mod.dia-sidebar.thinking",
-    "label": "Show the model's thinking (Anthropic and Gemini only; uses more tokens, needs a model that supports it)",
+    "label": "Show thinking",
     "type": "dropdown",
-    "default": "0",
     "defaultValue": "0",
+    "placeholder": false,
     "options": [
       {
         "label": "Off",
@@ -197,23 +90,275 @@
         "label": "Deep",
         "value": "8000"
       }
+    ],
+    "conditions": [
+      {
+        "if": {
+          "property": "mod.dia-sidebar.provider",
+          "value": "anthropic"
+        }
+      },
+      {
+        "if": {
+          "property": "mod.dia-sidebar.provider",
+          "value": "gemini"
+        }
+      }
     ]
   },
   {
-    "property": "mod.dia-sidebar.savehistory",
-    "label": "Save chat history to your Firefox profile (includes the page text each chat was about)",
+    "type": "separator",
+    "label": "**Chat**"
+  },
+  {
+    "property": "mod.dia-sidebar.style",
+    "label": "Answer length",
     "type": "dropdown",
-    "default": "true",
-    "defaultValue": "true",
+    "defaultValue": "concise",
+    "placeholder": false,
     "options": [
       {
-        "label": "Yes",
+        "label": "Concise",
+        "value": "concise"
+      },
+      {
+        "label": "Balanced",
+        "value": "balanced"
+      },
+      {
+        "label": "Detailed",
+        "value": "detailed"
+      }
+    ]
+  },
+  {
+    "property": "mod.dia-sidebar.language",
+    "label": "Reply language",
+    "type": "string",
+    "defaultValue": "",
+    "placeholder": "Blank = the language I write in"
+  },
+  {
+    "property": "mod.dia-sidebar.instructions",
+    "label": "Custom instructions",
+    "type": "string",
+    "defaultValue": "",
+    "placeholder": "e.g. Keep it casual. Use British spelling."
+  },
+  {
+    "property": "mod.dia-sidebar.autosummarize",
+    "label": "Summarize automatically",
+    "type": "dropdown",
+    "defaultValue": "youtube",
+    "placeholder": false,
+    "options": [
+      {
+        "label": "YouTube videos only",
+        "value": "youtube"
+      },
+      {
+        "label": "Every page",
         "value": "true"
       },
       {
-        "label": "No",
+        "label": "Never",
         "value": "false"
       }
     ]
+  },
+  {
+    "property": "mod.dia-sidebar.entersends",
+    "label": "Press Enter to send  (off: Enter adds a new line, Ctrl/Cmd+Enter sends)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "type": "separator",
+    "label": "**Context**"
+  },
+  {
+    "property": "mod.dia-sidebar.attachpage",
+    "label": "Attach the current page automatically",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "mod.dia-sidebar.attachselection",
+    "label": "Attach text I select on the page",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "mod.dia-sidebar.ytstamps",
+    "label": "Keep timestamps in YouTube transcripts  (needed for key moments)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "type": "separator",
+    "label": "**Web search**"
+  },
+  {
+    "property": "mod.dia-sidebar.websearch",
+    "label": "Search the web",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "placeholder": false,
+    "options": [
+      {
+        "label": "Automatic (recommended)",
+        "value": "auto"
+      },
+      {
+        "label": "Only with the globe button",
+        "value": "manual"
+      },
+      {
+        "label": "Off",
+        "value": "off"
+      }
+    ]
+  },
+  {
+    "property": "mod.dia-sidebar.searchengine",
+    "label": "Search engine",
+    "type": "dropdown",
+    "defaultValue": "duckduckgo",
+    "placeholder": false,
+    "options": [
+      {
+        "label": "DuckDuckGo",
+        "value": "duckduckgo"
+      },
+      {
+        "label": "Brave Search",
+        "value": "brave"
+      },
+      {
+        "label": "SearXNG",
+        "value": "searxng"
+      }
+    ],
+    "conditions": [
+      {
+        "if": {
+          "property": "mod.dia-sidebar.provider",
+          "value": "apple"
+        }
+      },
+      {
+        "if": {
+          "property": "mod.dia-sidebar.provider",
+          "value": "openai"
+        }
+      }
+    ]
+  },
+  {
+    "property": "mod.dia-sidebar.searchsetup",
+    "label": "Brave API key or SearXNG address",
+    "type": "string",
+    "defaultValue": "",
+    "placeholder": "Only needed for Brave or SearXNG",
+    "conditions": [
+      {
+        "not": {
+          "property": "mod.dia-sidebar.searchengine",
+          "value": "duckduckgo"
+        }
+      }
+    ]
+  },
+  {
+    "type": "separator",
+    "label": "**Appearance**\n*Drag the sidebar's edge to resize it. Double-click the edge to reset.*"
+  },
+  {
+    "property": "mod.dia-sidebar.side",
+    "label": "Sidebar side",
+    "type": "dropdown",
+    "defaultValue": "right",
+    "placeholder": false,
+    "options": [
+      {
+        "label": "Right",
+        "value": "right"
+      },
+      {
+        "label": "Left",
+        "value": "left"
+      }
+    ]
+  },
+  {
+    "property": "mod.dia-sidebar.accent",
+    "label": "Colours",
+    "type": "dropdown",
+    "defaultValue": "space",
+    "placeholder": false,
+    "options": [
+      {
+        "label": "Match my Zen space",
+        "value": "space"
+      },
+      {
+        "label": "Neutral",
+        "value": "neutral"
+      }
+    ]
+  },
+  {
+    "property": "mod.dia-sidebar.textsize",
+    "label": "Text size",
+    "type": "dropdown",
+    "defaultValue": "medium",
+    "placeholder": false,
+    "options": [
+      {
+        "label": "Small",
+        "value": "small"
+      },
+      {
+        "label": "Medium",
+        "value": "medium"
+      },
+      {
+        "label": "Large",
+        "value": "large"
+      }
+    ]
+  },
+  {
+    "property": "mod.dia-sidebar.urlbarbutton",
+    "label": "Show the chat button in the URL bar",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "type": "separator",
+    "label": "**Privacy**"
+  },
+  {
+    "property": "mod.dia-sidebar.history",
+    "label": "Save chat history on this computer",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "type": "separator",
+    "label": "**Advanced**"
+  },
+  {
+    "property": "mod.dia-sidebar.prompt",
+    "label": "Summarize instruction",
+    "type": "string",
+    "defaultValue": "Summarize this page into concise bullet points."
+  },
+  {
+    "property": "mod.dia-sidebar.maxchars",
+    "label": "Page text limit (characters)",
+    "type": "string",
+    "defaultValue": "",
+    "placeholder": "Blank = automatic"
   }
 ]

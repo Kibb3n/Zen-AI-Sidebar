@@ -42,6 +42,11 @@
     { id: "yt-takeaways", name: "Takeaways", prompt: "What are the main takeaways from this video? Answer in a few concise bullet points with no timestamps." },
     { id: "yt-tldr", name: "TL;DR", prompt: "Give a two-sentence TL;DR of this video. No timestamps." },
   ];
+  // appended to the system prompt whenever a search tool is available, so the model searches on its own like Dia does
+  const SEARCH_NUDGE =
+    "You have a live web search tool. Use it automatically, without asking permission, whenever the answer depends on current, recent or outside information " +
+    "(news, prices, scores, weather, people, companies, products, software versions, events, anything described as latest or current) or whenever you are not sure. " +
+    "Do not search for questions about the page itself, rewriting, translating, math, or timeless knowledge.";
   // For models without a built-in search tool: one quick call decides whether (and what) to search
   const ROUTER_SYSTEM =
     "You decide whether a browser assistant must search the web to answer the user's latest message. " +
@@ -95,25 +100,41 @@
   // ---------- styles (embedded so script and CSS always match) ----------
   const CSS = `
 #dia-dock {
-  --fg: #18181b; --bg: #fafafa; --card: #ffffff; --accent: #2f6bff; --danger: #e5484d;
-  --line: color-mix(in srgb, var(--fg) 9%, transparent);
+  /* Colours come from Zen's own tokens, so the sidebar follows every space (--zen-primary-color) and Zen's own
+     light/dark setting (light-dark). The fallbacks keep it neutral in plain Firefox. */
+  --fg: var(--zen-branding-bg-reverse, light-dark(#18181b, #f2f2f4));
+  --bg: var(--zen-colors-tertiary, light-dark(#fafafa, #19191b));
+  --card: var(--zen-browser-content-background, light-dark(#ffffff, #242427));
+  --tint: var(--zen-primary-color, #6b7cff);
+  --accent: light-dark(color-mix(in srgb, var(--tint) 80%, black), color-mix(in srgb, var(--tint) 70%, white));
+  --on-accent: light-dark(#ffffff, #101010);
+  --danger: light-dark(#d93036, #ff7a7f);
+  --line: color-mix(in srgb, var(--fg) 10%, transparent);
   --soft: color-mix(in srgb, var(--fg) 5%, transparent);
   --soft2: color-mix(in srgb, var(--fg) 9%, transparent);
   --mute: color-mix(in srgb, var(--fg) 52%, transparent);
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  position: fixed; z-index: 2147483000; box-sizing: border-box; display: flex; flex-direction: column;
+  &[data-accent="neutral"] { --tint: light-dark(#5b6b86, #b8c4d9); --bg: light-dark(#f7f7f8, #18181a); }
+  /* a real sidebar: an in-flow flex item next to the tab box, styled like Zen's own page card */
+  position: relative; flex: 0 0 var(--dia-w, 400px); width: var(--dia-w, 400px); min-width: 0; align-self: stretch;
+  margin-inline-start: var(--zen-element-separation, 8px);
+  box-sizing: border-box; display: flex; flex-direction: column;
   color: var(--fg); background: var(--bg);
-  font: 14px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased;
-  border: 1px solid var(--line); border-radius: var(--zen-native-inner-radius, 14px);
-  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.04), 0 12px 32px rgba(0, 0, 0, 0.1);
+  font: var(--dia-fs, 14px)/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased;
+  border-radius: calc(var(--zen-native-inner-radius, 12px) / var(--zen-squircle-value, 1)); corner-shape: round;
+  box-shadow: var(--zen-big-shadow, 0 2px 10px rgba(0, 0, 0, 0.14));
   animation: dia-slide 0.32s var(--ease);
   &[hidden] { display: none; }
+  &[data-side="left"] { margin-inline-start: 0; margin-inline-end: var(--zen-element-separation, 8px); }
+  &.dia-float { position: fixed; top: 80px; right: 8px; bottom: 8px; margin: 0; z-index: 2147483000; flex: none; }
+  :root[inDOMFullscreen="true"] &, :root[inFullscreen] & { display: none; }
   &.dia-resizing { user-select: none; }
   &.dia-resizing * { pointer-events: none; }
   &.dia-resizing .dia-grip { pointer-events: auto; }
 
-  .dia-grip { position: absolute; left: -6px; top: 10px; bottom: 10px; width: 12px; cursor: col-resize; z-index: 6; }
-  .dia-grip::after { content: ""; position: absolute; left: 5px; top: 0; bottom: 0; width: 2px; border-radius: 2px; background: var(--accent); opacity: 0; transition: opacity 0.15s; }
+  .dia-grip { position: absolute; left: calc(-1 * var(--zen-element-separation, 8px) - 2px); top: 10px; bottom: 10px; width: calc(var(--zen-element-separation, 8px) + 6px); cursor: col-resize; z-index: 6; }
+  &[data-side="left"] .dia-grip { left: auto; right: calc(-1 * var(--zen-element-separation, 8px) - 2px); }
+  .dia-grip::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; margin-left: -1px; border-radius: 3px; background: var(--accent); opacity: 0; transition: opacity 0.15s; }
   .dia-grip:hover::after, &.dia-resizing .dia-grip::after { opacity: 0.5; }
 
   .dia-panels { flex: 1; min-height: 0; display: flex; flex-direction: column; border-radius: inherit; overflow: hidden; position: relative; }
@@ -165,7 +186,7 @@
 
   /* your messages */
   .dia-ug { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: 88%; position: relative; }
-  .dia-ubub { padding: 8px 14px; border-radius: 18px 18px 6px 18px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--soft2); }
+  .dia-ubub { padding: 8px 14px; border-radius: 18px 18px 6px 18px; white-space: pre-wrap; overflow-wrap: anywhere; background: color-mix(in srgb, var(--tint) 15%, var(--bg)); }
   .dia-ug-tools { position: absolute; left: -30px; bottom: 0; opacity: 0; transition: opacity 0.15s; }
   .dia-ug:hover .dia-ug-tools { opacity: 1; }
   .dia-sent { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
@@ -201,7 +222,7 @@
   .dia-mini:hover { color: var(--fg); background: var(--soft); }
   .dia-btn { appearance: none; cursor: pointer; border-radius: 10px; padding: 6px 14px; border: 1px solid var(--line); background: var(--card); font-size: 13px; transition: background-color 0.15s; }
   .dia-btn:hover { background: var(--soft); }
-  .dia-btn.dia-primary { background: var(--fg); color: var(--bg); border-color: transparent; }
+  .dia-btn.dia-primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
   .dia-btn.dia-primary:hover { opacity: 0.88; }
   .dia-btn[disabled] { opacity: 0.4; cursor: default; }
 
@@ -247,7 +268,7 @@
   .dia-input::placeholder { color: inherit; opacity: 0.42; }
   .dia-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
   .dia-add { width: 28px; height: 28px; }
-  .dia-send { appearance: none; border: 0; cursor: pointer; flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--fg); color: var(--bg); transition: transform 0.15s var(--ease), opacity 0.15s; }
+  .dia-send { appearance: none; border: 0; cursor: pointer; flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--on-accent); transition: transform 0.15s var(--ease), opacity 0.15s; }
   .dia-send .dia-svg { width: 15px; height: 15px; }
   .dia-send:not([disabled]):hover { transform: scale(1.07); }
   .dia-send:active { transform: scale(0.92); }
@@ -268,7 +289,7 @@
   .dia-src span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
   .dia-src .dia-fav { margin: 0; }
   .dia-cite { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; margin-inline: 1px 2px; box-sizing: border-box; border-radius: 8px; background: var(--soft2); color: var(--mute); font-size: 10.5px; font-weight: 600; text-decoration: none; cursor: pointer; vertical-align: 1px; transition: background-color 0.15s, color 0.15s; }
-  .dia-cite:hover { background: var(--accent); color: #fff; }
+  .dia-cite:hover { background: var(--accent); color: var(--on-accent); }
 
   /* drop zone: files and tabs dragged onto the sidebar */
   .dia-dropzone { position: absolute; inset: 8px; z-index: 9; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; pointer-events: none;
@@ -318,22 +339,20 @@
 @keyframes dia-chunk { from { opacity: 0; filter: blur(1px); } to { opacity: 1; filter: blur(0); } }
 @keyframes dia-fade { from { opacity: 0; } to { opacity: 1; } }
 /* the chat button inside the URL bar (in Zen, the URL bar sits at the top of the left sidebar).
-   Icon: Ionicons "chatbubble-ellipses" (MIT), the same glyph Zen ships for its own chat icon.
-   It is hidden until you hover the URL bar and stays visible while the sidebar is open. Zen already
-   does this for every .urlbar-page-action in its sidebar layout; the rules below cover other layouts. */
+   Icon: Ionicons "chatbubble-ellipses" (MIT), the glyph Zen ships for its own chat icon.
+   It adds NO colour or opacity of its own: like Zen's built-in URL bar icons it takes both from the URL bar
+   (white in dark toolbars). It is hidden until you hover the URL bar, which Zen already does for every
+   .urlbar-page-action in its sidebar layout; the opacity rules below cover other layouts. */
 #dia-sidebar-urlbar { margin-inline: 1px; }
 #dia-sidebar-urlbar:not([open]) { opacity: 0; transition: opacity 0.15s; }
 #urlbar:hover #dia-sidebar-urlbar, #urlbar[focused] #dia-sidebar-urlbar, #dia-sidebar-urlbar:hover, #dia-sidebar-urlbar[open] { opacity: 1; }
 #dia-sidebar-urlbar .urlbar-icon {
   list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='context-fill' fill-opacity='context-fill-opacity'%3E%3Cpath d='M 398,81.84 A 227.4,227.4 0 0 0 255.82,32 C 194.9,32 138,55.47 95.46,98.09 54.35,139.33 31.82,193.78 32,251.37 a 215.66,215.66 0 0 0 35.65,118.76 l 0.19,0.27 c 0.28,0.41 0.57,0.82 0.86,1.22 0.29,0.4 0.65,0.92 0.73,1.05 l 0.22,0.4 c 1.13,2 2,4.44 1.23,6.9 l -18.42,66.66 a 29.13,29.13 0 0 0 -1.2,7.63 25.69,25.69 0 0 0 25.57,25.74 29.44,29.44 0 0 0 10.45,-2.29 l 67.49,-24.36 0.85,-0.33 a 14.75,14.75 0 0 1 5.8,-1.15 15.12,15.12 0 0 1 5.37,1 c 1.62,0.63 16.33,6.26 31.85,10.6 12.9,3.6 39.74,9 60.77,9 59.65,0 115.35,-23.1 156.83,-65.06 C 457.36,365.77 480,310.42 480,251.49 a 213.5,213.5 0 0 0 -4.78,-45 C 464.88,157.87 437.46,113.59 398,81.84 Z M 87.48,380 Z M 160,288 a 32,32 0 1 1 32,-32 32,32 0 0 1 -32,32 z m 96,0 a 32,32 0 1 1 32,-32 32,32 0 0 1 -32,32 z m 96,0 a 32,32 0 1 1 32,-32 32,32 0 0 1 -32,32 z'/%3E%3C/svg%3E");
-  -moz-context-properties: fill, fill-opacity; fill: currentColor; fill-opacity: 0.75;
-  width: 16px; height: 16px; transition: fill-opacity 0.15s, color 0.15s;
+  -moz-context-properties: fill, fill-opacity; fill: currentColor;
+  width: 16px; height: 16px;
 }
-#dia-sidebar-urlbar:hover .urlbar-icon { fill-opacity: 1; }
-#dia-sidebar-urlbar[open] .urlbar-icon { fill-opacity: 1; color: var(--zen-primary-color, #2f6bff); }
-@media (prefers-color-scheme: dark) {
-  #dia-dock { --fg: #f2f2f4; --bg: #19191b; --card: #242427; --accent: #7aa7ff; --danger: #ff7a7f; box-shadow: 0 0 0 0.5px rgba(255,255,255,0.06), 0 12px 32px rgba(0,0,0,0.5); }
-}
+/* while the sidebar is open: a neutral highlight behind the (still white) icon */
+#dia-sidebar-urlbar[open] { background-color: color-mix(in srgb, currentColor 14%, transparent); border-radius: var(--urlbar-icon-border-radius, 6px); }
 @media (prefers-reduced-motion: reduce) {
   #dia-dock, #dia-dock * { animation-duration: 1ms !important; animation-delay: 0s !important; transition-duration: 1ms !important; }
 }
@@ -357,18 +376,19 @@
     try { return Services.prefs.getStringPref(PREF + k, d) || d; } catch { return d; }
   };
   const setPref = (k, v) => { try { Services.prefs.setStringPref(PREF + k, String(v)); } catch {} };
+  // checkboxes in Sine's settings are real booleans
+  const bool = (k, d) => { try { return Services.prefs.getBoolPref(PREF + k); } catch { return d; } };
   const provider = () => pref("provider", "apple");
   const apiKey = () => pref("apikey", "").trim();
+  // one "Server address" setting (older versions had a separate one per provider; those still work)
+  const server = () => (pref("server", "") || (provider() === "apple" ? pref("applebase", "") : pref("baseurl", ""))).trim();
   const baseUrl = () =>
-    (provider() === "apple"
-      ? pref("applebase", "http://127.0.0.1:11435/v1")
-      : pref("baseurl", "https://api.openai.com/v1")
-    )
+    (server() || (provider() === "apple" ? "http://127.0.0.1:11435/v1" : "https://api.openai.com/v1"))
       .trim()
       .replace(/\/+$/, "")
       .replace(/^(https?:\/\/[^/]+)$/, provider() === "apple" ? "$1/v1" : "$1");
   const model = () =>
-    pref("model", "") || ({ anthropic: "claude-haiku-5-5", apple: "apple.local", gemini: "gemini-3.5-flash" }[provider()] || "gpt-4o-mini");
+    pref("model", "") || ({ anthropic: "claude-haiku-5-5", apple: "apple.local", gemini: "flash" }[provider()] || "gpt-4o-mini");
   const isNative = () => provider() === "anthropic" || provider() === "gemini"; // has its own web-search tool and reads PDFs natively
   const rawPdf = () => isNative(); // models that read PDF bytes directly
   const llmReady = () =>
@@ -379,16 +399,33 @@
   // Apple's on-device model has a tiny context (chunk hard); other local models handle far more.
   const chunkSize = () => parseInt(pref("maxchars", ""), 10) || (provider() === "apple" ? 6000 : isLocal() ? 16000 : MAX_CHARS);
   const thinkBudget = () => (isNative() ? parseInt(pref("thinking", "0"), 10) || 0 : 0);
-  // "auto": the model decides when to search. "manual": only when you turn Web on (globe button / @Web).
-  // Default = auto for Anthropic/Gemini (built-in tools), manual for others (they search the web from your browser).
+  // "auto" (default, like Dia): the assistant searches the web by itself whenever the question needs it.
+  // "manual": only when you turn the globe on / use @Web. "off": never.
   const webMode = () => {
-    const v = pref("websearch", "default");
-    return v === "default" ? (isNative() ? "auto" : "manual") : v;
+    const v = pref("websearch", "auto");
+    return v === "default" ? "auto" : v;
   };
-  const keepHistory = () => pref("savehistory", "true") !== "false";
+  // if Anthropic/Gemini reject their built-in search tool (plan, region, model), we search from the browser instead
+  const searchBroken = new Set(); // providers whose built-in search tool was refused (remembered per provider)
+  // messages that are clearly about live / outside information search even if the model wouldn't have chosen to
+  const WEB_HINT = /\b(latest|newest|currently|right now|today|tonight|tomorrow|yesterday|this (week|weekend|month|year)|news|headlines?|breaking|price of|how much (is|does|are|do)|cost of|weather|forecast|score|standings|who won|who is the (ceo|president|prime minister|founder)|release date|when (is|does|did|will)|stock|exchange rate|trending|near me|open now|search (the )?(web|online|for)|look (it |this |that |them )?up|google|find (it |this |that )?(out|online))\b|\b20(2[4-9]|3\d)\b/i;
+  const ABOUT_PAGE = /\b(this|the|that) (page|article|video|post|site|text|document|paper|thread|email|tab)\b|\bsummari[sz]e\b|\bproofread\b|\btranslate\b/i;
+  const needsWeb = (t) => !!t && WEB_HINT.test(t) && (!ABOUT_PAGE.test(t) || /\b(search|look up|google|online)\b/i.test(t));
+  const keepHistory = () => bool("history", pref("savehistory", "true") !== "false");
+  // Brave API key or SearXNG address (one field; older per-engine fields still work)
+  const searchSetup = (eng) => pref("searchsetup", "").trim() || (eng === "brave" ? pref("searchkey", "") : pref("searxurl", "")).trim();
+  const STYLES = {
+    balanced: "Give balanced answers: clear and complete without padding (this overrides the instruction to be brief).",
+    detailed: "Give thorough, well-structured answers with the relevant detail and context (this overrides the instruction to be brief).",
+  };
   const systemPrompt = () => {
+    let s = SYSTEM;
+    const style = STYLES[pref("style", "concise")];
+    if (style) s += "\n\n" + style;
+    const lang = pref("language", "").trim();
+    if (lang) s += `\n\nAlways reply in ${lang}, whatever language the page or the question is in.`;
     const extra = pref("instructions", "").trim();
-    return SYSTEM + (extra ? "\n\nThe user's standing instructions for how you respond:\n" + extra : "");
+    return s + (extra ? "\n\nThe user's standing instructions for how you respond:\n" + extra : "");
   };
   const canSeeFiles = () => provider() !== "apple"; // the on-device model is text-only
 
@@ -821,7 +858,7 @@
       e.noCaptions = true;
       throw e;
     }
-    const stamps = forceStamps || pref("yttimestamps", "true") !== "false";
+    const stamps = forceStamps || bool("ytstamps", pref("yttimestamps", "true") !== "false");
     const title = data.title || "YouTube video";
     // merge the granular ~2s caption lines into larger blocks: far less text (faster for a local
     // model) and far fewer timestamps, so a plain summary stays clean and "key moments" groups
@@ -921,9 +958,12 @@
   }
 
   // ---------- networking ----------
-  const httpError = (status, body) =>
-    `${status} ${String(body).replace(/\s+/g, " ").slice(0, 200)}` +
-    (status === 401 || status === 403 ? " (check the API key / access settings of your AI server)" : "");
+  const httpError = (status, body) => {
+    let msg = String(body);
+    try { const j = JSON.parse(msg); msg = (Array.isArray(j) ? j[0] : j)?.error?.message || msg; } catch {}
+    return `${status} ${msg.replace(/\s+/g, " ").slice(0, 300)}` +
+      (status === 401 || status === 403 ? " (check the API key / access settings of your AI server)" : "");
+  };
 
   // afm-server documents Bearer auth, but its Xcode setup uses x-api-key, so send both
   const authHeaders = () =>
@@ -1140,9 +1180,111 @@
   };
   // req = { system, pageBlock, messages, web, forceWeb }.
   // Yields { t: "text" | "think" | "status" | "query" | "sources", d }.
+  // If the provider rejects its built-in search tool before answering, the error carries webUnavailable = true
+  // so the caller can search from the browser instead.
   async function* streamLLM(req, signal) {
+    let started = false;
+    try {
+      for await (const ev of streamRaw(req, signal)) { started = true; yield ev; }
+    } catch (e) {
+      const m = String(e?.message || "");
+      if (!started && req.web && e.name !== "AbortError" && /^(400|403|404|429)\b/.test(m) && /search|ground|tool/i.test(m)) e.webUnavailable = true;
+      throw e;
+    }
+  }
+
+  // Gemini: a blank model (or "flash", "flash-lite", "pro") means "the newest one of that kind this API key can use",
+  // so a retired or renamed model ID never breaks chat. An exact ID (gemini-3.8-flash) is used as typed.
+  const geminiAuto = {};
+  const geminiVer = (n) => parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)-/) || [])[1] || "0");
+  async function geminiCandidates(signal) {
+    const want = (pref("model", "") || "flash").trim().replace(/^models\//, "");
+    if (/^gemini-/.test(want)) return [want];
+    const kind = /^(flash-lite|pro)$/.test(want) ? want : "flash";
+    if (geminiAuto[kind]) return geminiAuto[kind];
+    const re = new RegExp(`^gemini-\\d+(?:\\.\\d+)?-${kind}$`);
+    let list = [];
+    try {
+      const r = await fetchText(`${GEMINI_BASE}/models?pageSize=200`, { headers: { "x-goog-api-key": apiKey() } }, 8000, signal);
+      if (r.ok) {
+        list = (JSON.parse(r.text).models || [])
+          .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
+          .map((m) => String(m.name).replace(/^models\//, ""))
+          .filter((n) => re.test(n))
+          .sort((x, y) => geminiVer(y) - geminiVer(x));
+      }
+    } catch (e) { if (e.name === "AbortError") throw e; }
+    if (!list.length) {
+      list = kind === "flash" ? ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash"]
+        : kind === "flash-lite" ? ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"]
+        : ["gemini-3.1-pro-preview", "gemini-2.5-pro"];
+    } else geminiAuto[kind] = list; // only cache a real answer from the API
+    return list;
+  }
+  async function* geminiStream(req, system, signal) {
+    const headers = { "content-type": "application/json", "x-goog-api-key": apiKey() };
+    const contents = [];
+    for (const m of req.messages) { // Gemini wants strictly alternating user/model turns
+      const role = m.role === "assistant" ? "model" : "user";
+      const parts = typeof m.content === "string" ? [{ text: m.content }] : m.content;
+      if (contents.at(-1)?.role === role) contents.at(-1).parts.push(...parts);
+      else contents.push({ role, parts: [...parts] });
+    }
+    const tb = thinkBudget();
+    const cands = await geminiCandidates(signal);
+    let lastErr = null;
+    for (let ci = 0; ci < cands.length; ci++) {
+      const mid = cands[ci];
+      let useThink = true;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const body = { system_instruction: { parts: [{ text: system + (req.pageBlock ? "\n\n" + req.pageBlock : "") }] }, contents, generationConfig: { maxOutputTokens: 8192 } };
+        if (req.web) body.tools = [{ google_search: {} }];
+        if (useThink) {
+          // Gemini 2.x takes a token budget, 3.x a level (never both). Without a setting, 3.x gets "low" so chat stays fast.
+          if (tb) body.generationConfig.thinkingConfig = /gemini-2\./.test(mid) ? { thinkingBudget: tb, includeThoughts: true } : { thinkingLevel: tb <= 2048 ? "low" : "high", includeThoughts: true };
+          else if (/gemini-(3|4)/.test(mid)) body.generationConfig.thinkingConfig = { thinkingLevel: "low" };
+        }
+        let got = false, gotText = false;
+        const srcs = new Map(), seenQ = new Set();
+        try {
+          const url = `${GEMINI_BASE}/models/${encodeURIComponent(mid)}:streamGenerateContent?alt=sse`;
+          for await (const j of sseEvents(chunks(url, headers, JSON.stringify(body), signal))) {
+            got = true;
+            if (j.error) throw new Error(j.error.message || "Gemini API error");
+            if (j.promptFeedback?.blockReason) throw new Error("Gemini blocked this request (" + j.promptFeedback.blockReason + ")");
+            const c = j.candidates?.[0];
+            if (!c) continue;
+            for (const p of c.content?.parts || []) {
+              if (!p.text) continue;
+              if (!p.thought) gotText = true;
+              yield { t: p.thought ? "think" : "text", d: p.text };
+            }
+            const g = c.groundingMetadata;
+            if (g) {
+              for (const q of g.webSearchQueries || []) if (!seenQ.has(q)) { seenQ.add(q); yield { t: "query", d: q }; }
+              for (const ch of g.groundingChunks || []) if (ch.web?.uri) srcs.set(ch.web.uri, { title: ch.web.title || "", url: ch.web.uri });
+            }
+            if (c.finishReason && !gotText && !/^(STOP|MAX_TOKENS)$/.test(c.finishReason)) throw new Error("Gemini stopped without an answer (" + c.finishReason + ")");
+          }
+          if (srcs.size) yield { t: "sources", d: [...srcs.values()].slice(0, 8) };
+          return;
+        } catch (e) {
+          if (e.name === "AbortError" || got) throw e;
+          const m = String(e.message || "");
+          if (useThink && /thinking|thought/i.test(m)) { useThink = false; continue; } // this model doesn't take that setting
+          if (/^404\b|not found|not supported|no longer available|deprecated/i.test(m) && !/search|ground|tool/i.test(m) && ci < cands.length - 1) { lastErr = e; break; } // try the next model
+          throw e;
+        }
+      }
+    }
+    throw lastErr || new Error("No usable Gemini model for this API key");
+  }
+
+  async function* streamRaw(req, signal) {
     const prov = provider();
-    const system = req.system + (req.web && req.forceWeb ? "\n\nThe user turned on web search: search the web for current information before answering." : "");
+    const system = req.system + (req.web ? "\n\n" + SEARCH_NUDGE : "") +
+      (req.web && req.forceWeb ? "\n\nWeb search is required for this request: search the web for current information before answering." : "");
+    if (prov === "gemini") { yield* geminiStream(req, system, signal); return; }
     let url, headers, body;
     if (prov === "anthropic") {
       url = "https://api.anthropic.com/v1/messages";
@@ -1153,28 +1295,13 @@
       body = { model: model(), max_tokens: 4096 + (think >= 1024 ? think : 0), stream: true, system: sys, messages: req.messages };
       if (think >= 1024) body.thinking = { type: "enabled", budget_tokens: think };
       if (req.web) body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }];
-    } else if (prov === "gemini") {
-      url = `${GEMINI_BASE}/models/${encodeURIComponent(model())}:streamGenerateContent?alt=sse`;
-      headers = { "content-type": "application/json", "x-goog-api-key": apiKey() };
-      const contents = [];
-      for (const m of req.messages) { // Gemini wants strictly alternating user/model turns
-        const role = m.role === "assistant" ? "model" : "user";
-        const parts = typeof m.content === "string" ? [{ text: m.content }] : m.content;
-        if (contents.at(-1)?.role === role) contents.at(-1).parts.push(...parts);
-        else contents.push({ role, parts: [...parts] });
-      }
-      body = { system_instruction: { parts: [{ text: system + (req.pageBlock ? "\n\n" + req.pageBlock : "") }] }, contents, generationConfig: { maxOutputTokens: 8192 } };
-      if (req.web) body.tools = [{ google_search: {} }];
-      const tb = thinkBudget();
-      // Gemini 2.x takes a token budget, Gemini 3.x a level (sending both is a 400)
-      if (tb) body.generationConfig.thinkingConfig = /gemini-2\./.test(model()) ? { thinkingBudget: tb, includeThoughts: true } : { thinkingLevel: tb <= 2048 ? "low" : "high", includeThoughts: true };
     } else {
       url = baseUrl() + "/chat/completions";
       headers = { "content-type": "application/json", ...authHeaders() };
       body = { model: model(), stream: true, messages: [{ role: "system", content: system + (req.pageBlock ? "\n\n" + req.pageBlock : "") }, ...req.messages] };
     }
-    let sawTool = false, toolIdx = -1, toolBuf = "", gotText = false;
-    const results = [], cited = [], gemSrc = new Map(), seenQ = new Set();
+    let sawTool = false, toolIdx = -1, toolBuf = "";
+    const results = [], cited = [];
     for await (const j of sseEvents(chunks(url, headers, JSON.stringify(body), signal))) {
       if (prov === "anthropic") {
         if (j.type === "error") throw new Error(j.error?.message || "API error");
@@ -1193,22 +1320,6 @@
           try { const q = JSON.parse(toolBuf).query; if (q) yield { t: "query", d: q }; } catch {}
           toolIdx = -1; toolBuf = "";
         }
-      } else if (prov === "gemini") {
-        if (j.error) throw new Error(j.error.message || "Gemini API error");
-        if (j.promptFeedback?.blockReason) throw new Error("Gemini blocked this request (" + j.promptFeedback.blockReason + ")");
-        const c = j.candidates?.[0];
-        if (!c) continue;
-        for (const p of c.content?.parts || []) {
-          if (!p.text) continue;
-          if (!p.thought) gotText = true;
-          yield { t: p.thought ? "think" : "text", d: p.text };
-        }
-        const g = c.groundingMetadata;
-        if (g) {
-          for (const q of g.webSearchQueries || []) if (!seenQ.has(q)) { seenQ.add(q); yield { t: "query", d: q }; }
-          for (const ch of g.groundingChunks || []) if (ch.web?.uri) gemSrc.set(ch.web.uri, { title: ch.web.title || "", url: ch.web.uri });
-        }
-        if (c.finishReason && !gotText && !/^(STOP|MAX_TOKENS)$/.test(c.finishReason)) throw new Error("Gemini stopped without an answer (" + c.finishReason + ")");
       } else {
         if (j.error) throw new Error(j.error.message || "API error");
         const dl = j.choices?.[0]?.delta;
@@ -1219,7 +1330,7 @@
       }
     }
     // sources: what the model actually cited if we know, otherwise everything it looked at
-    const src = prov === "gemini" ? [...gemSrc.values()] : dedupeSources(cited.length ? cited : results);
+    const src = dedupeSources(cited.length ? cited : results);
     if (src.length) yield { t: "sources", d: src.slice(0, 8) };
   }
 
@@ -1275,13 +1386,13 @@
     const enc = encodeURIComponent(q);
     let results = [];
     if (eng === "brave") {
-      const key = pref("searchkey", "").trim();
+      const key = searchSetup("brave");
       if (!key) throw new Error("Add your Brave Search API key in the mod's settings");
       const r = await fetchText(`https://api.search.brave.com/res/v1/web/search?q=${enc}&count=6`, { headers: { Accept: "application/json", "X-Subscription-Token": key } }, 9000, signal);
       if (!r.ok) throw new Error("Brave Search returned " + r.status);
       results = (JSON.parse(r.text).web?.results || []).map((x) => ({ title: stripTags(x.title), url: x.url, snippet: stripTags(x.description) }));
     } else if (eng === "searxng") {
-      const base = pref("searxurl", "").trim().replace(/\/+$/, "");
+      const base = searchSetup("searxng").replace(/\/+$/, "");
       if (!base) throw new Error("Add your SearXNG address in the mod's settings");
       const r = await fetchText(`${base}/search?q=${enc}&format=json`, {}, 9000, signal);
       if (!r.ok) throw new Error("SearXNG returned " + r.status + " (JSON output must be enabled on the instance)");
@@ -1479,26 +1590,42 @@
   }
 
   // ---------- the docked sidebar (one per window) ----------
-  // The page area is narrowed with a right margin on #appcontent, and the sidebar is positioned in
-  // the gap by measuring the tab panels. That works the same in Firefox and in Zen's wrappers.
+  // A real sidebar: the dock is a flex item placed right next to Zen's #tabbrowser-tabbox inside
+  // #zen-tabbox-wrapper (plain Firefox has the same tabbox/parent shape), so the page genuinely gets narrower.
   const sessions = new Map(); // tab -> session
   let dock = null, panelsEl = null, dragW = null;
-  const clampW = (w) => Math.max(320, Math.min(w, 760, Math.floor(window.innerWidth * 0.6)));
+  const hostW = () => document.getElementById("tabbrowser-tabbox")?.parentNode?.getBoundingClientRect().width || window.innerWidth;
+  const clampW = (w) => Math.max(320, Math.min(w, 800, Math.floor(hostW() * 0.6)));
   const dockWidth = () => dragW ?? clampW(parseInt(pref("width", "400"), 10) || 400);
+  const dockSide = () => (pref("side", "right") === "left" ? "left" : "right");
+
+  function mountDock() {
+    const tabbox = document.getElementById("tabbrowser-tabbox");
+    const parent = tabbox?.parentNode;
+    if (!parent) { // can't find the tab box: float over the page as a last resort
+      dock.classList.add("dia-float");
+      if (dock.parentNode !== document.documentElement) document.documentElement.append(dock);
+      return;
+    }
+    dock.classList.remove("dia-float");
+    const left = dockSide() === "left";
+    const placed = dock.parentNode === parent && (left ? tabbox.previousElementSibling === dock : tabbox.nextElementSibling === dock);
+    if (!placed) { if (left) tabbox.before(dock); else tabbox.after(dock); }
+  }
 
   function ensureDock() {
     if (dock) return dock;
     const grip = h("div", { className: "dia-grip", title: "Drag to resize · double-click to reset" });
     panelsEl = h("div", { className: "dia-panels" });
     dock = h("div", { id: "dia-dock", hidden: true }, grip, panelsEl);
-    document.documentElement.append(dock);
+    mountDock();
     grip.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
       e.preventDefault();
       grip.setPointerCapture(e.pointerId);
       dock.classList.add("dia-resizing");
-      const x0 = e.clientX, w0 = dockWidth();
-      const move = (ev) => { dragW = clampW(w0 + (x0 - ev.clientX)); updateDock(); };
+      const x0 = e.clientX, w0 = dockWidth(), sign = dockSide() === "left" ? -1 : 1;
+      const move = (ev) => { dragW = clampW(w0 + sign * (x0 - ev.clientX)); updateDock(); };
       const up = (ev) => {
         try { grip.releasePointerCapture(ev.pointerId); } catch {}
         grip.removeEventListener("pointermove", move);
@@ -1517,29 +1644,17 @@
     return dock;
   }
 
+  // shows/hides the dock and applies the look settings (side, text size, colours, width)
   function updateDock() {
     if (!dock) return;
-    const appc = document.getElementById("appcontent");
-    const vis = !window.fullScreen && [...sessions.values()].some((s) => s.visible);
     syncButton();
-    if (!vis) {
-      dock.hidden = true;
-      appc?.style.removeProperty("margin-right");
-      return;
-    }
-    const w = dockWidth();
-    appc?.style.setProperty("margin-right", w + "px", "important");
-    const tp = document.getElementById("tabbrowser-tabpanels") || gBrowser.selectedBrowser;
-    const r = tp.getBoundingClientRect();
-    const vw = window.innerWidth;
-    // If the page really made room for us, sit right beside it. If this layout ignored the margin,
-    // dock to the window's right edge anyway (overlaying the page) instead of landing off-screen.
-    const made = vw - r.right >= w - 2;
-    const left = Math.max(0, Math.round(made ? r.right + 6 : vw - w));
-    const top = r.height >= 40 ? Math.round(r.top) : 80;
-    const height = r.height >= 40 ? Math.round(r.height) : Math.max(200, window.innerHeight - top - 8);
+    if (![...sessions.values()].some((s) => s.visible)) { dock.hidden = true; return; }
+    mountDock();
+    dock.dataset.side = dockSide();
+    dock.dataset.accent = pref("accent", "space") === "neutral" ? "neutral" : "space";
+    dock.style.setProperty("--dia-w", dockWidth() + "px");
+    dock.style.setProperty("--dia-fs", { small: "13px", large: "15.5px" }[pref("textsize", "medium")] || "14px");
     dock.hidden = false;
-    Object.assign(dock.style, { left: left + "px", top: top + "px", width: Math.max(300, vw - 8 - left) + "px", height: height + "px" });
   }
 
   // ---------- attachment pills ----------
@@ -1676,7 +1791,7 @@
 
     // ----- text selected on the page becomes a pill in the composer -----
     const mm = src.linkedBrowser?.messageManager;
-    const onSelection = (m) => { if (panel && !panel.hidden && !closed) addRef(m.data?.text); };
+    const onSelection = (m) => { if (panel && !panel.hidden && !closed && bool("attachselection", true)) addRef(m.data?.text); };
     if (mm) {
       try {
         mm.loadFrameScript(
@@ -2060,8 +2175,9 @@
         : { role: "user", content: apiContent(userText(m, m === lastU), (m.refs || []).filter(sendsRaw)) });
       while (msgs[0]?.role === "assistant") msgs.shift();
       if (resuming) msgs.push({ role: "user", content: "Continue exactly where you stopped. Do not repeat what you already wrote." });
-      const forced = !!lastU?.web;
-      const nativeWeb = isNative() && webMode() !== "off" && (webMode() === "auto" || forced); // Anthropic/Gemini run their own search
+      const heur = webMode() === "auto" && !lastU?.fromSkill && needsWeb(lastU?.label || lastU?.content || "");
+      const forced = !!lastU?.web || heur;
+      const nativeWeb = isNative() && !searchBroken.has(provider()) && webMode() !== "off" && (webMode() === "auto" || forced); // Anthropic/Gemini run their own search
       return { system: systemPrompt(), pageBlock: [pageBlock, webCtx?.text].filter(Boolean).join("\n\n"), messages: msgs, web: nativeWeb, forceWeb: forced };
     }
 
@@ -2304,9 +2420,12 @@
           answerEl.append(h("div", { className: "dia-note", textContent: "Offline summary. Add an API key (or a local model) in the mod settings for AI answers." }));
         } else {
           const lastU = [...convo].reverse().find((m) => m.role === "user");
-          if (!prior && !isNative() && webMode() !== "off" && (lastU?.web || (webMode() === "auto" && !lastU?.fromSkill))) {
-            try { // read the web from the browser: plan a query, search, read the top pages
-              const q = await planSearch(convo, page, !!lastU?.web, signal);
+          const heur = webMode() === "auto" && !lastU?.fromSkill && needsWeb(lastU?.label || lastU?.content || "");
+          // Search from the browser (for models without a built-in tool, or when that tool was rejected):
+          // the model writes a query, we search, read the top pages and hand them back as numbered sources.
+          const runFallback = async () => {
+            try {
+              const q = await planSearch(convo, page, !!lastU?.web || heur, signal);
               if (q) {
                 const cap = provider() === "apple" ? 900 : 3500;
                 setStatus(`Searching the web for “${q}”…`);
@@ -2322,19 +2441,30 @@
               clearStatus();
               block.insertBefore(h("div", { className: "dia-note", textContent: "Couldn't search the web: " + e.message }), answerEl);
             }
-          }
-          for await (const ev of streamLLM(buildRequest(!!prior, webCtx), signal)) {
-            if (ev.t === "think") { onThink(ev.d); continue; }
-            if (ev.t === "status") { setStatus(ev.d); continue; }
-            if (ev.t === "query") { qset.add(ev.d); continue; }
-            if (ev.t === "sources") { for (const s of ev.d) srcMap.set(s.url, s); continue; }
-            endThink(); clearStatus();
-            acc = acc.length > 20 && ev.d.startsWith(acc) ? ev.d : acc + ev.d; // tolerate cumulative streams
-            const now = Date.now();
-            const end = chunkEnd();
-            if (end > 0) { lastPaint = now; paint(end); }
-            else if (acc.length - shown >= 500) { lastPaint = now; paint(); }
-            else if (acc.length > shown && now - lastPaint >= 1800) { lastPaint = now; paint(); }
+          };
+          const wantsSearch = !prior && webMode() !== "off" && (lastU?.web || (webMode() === "auto" && !lastU?.fromSkill));
+          if (wantsSearch && (!isNative() || searchBroken.has(provider()))) await runFallback();
+          for (let attempt = 0; ; attempt++) {
+            try {
+              for await (const ev of streamLLM(buildRequest(!!prior, webCtx), signal)) {
+                if (ev.t === "think") { onThink(ev.d); continue; }
+                if (ev.t === "status") { setStatus(ev.d); continue; }
+                if (ev.t === "query") { qset.add(ev.d); continue; }
+                if (ev.t === "sources") { for (const s of ev.d) srcMap.set(s.url, s); continue; }
+                endThink(); clearStatus();
+                acc = acc.length > 20 && ev.d.startsWith(acc) ? ev.d : acc + ev.d; // tolerate cumulative streams
+                const now = Date.now();
+                const end = chunkEnd();
+                if (end > 0) { lastPaint = now; paint(end); }
+                else if (acc.length - shown >= 500) { lastPaint = now; paint(); }
+                else if (acc.length > shown && now - lastPaint >= 1800) { lastPaint = now; paint(); }
+              }
+              break;
+            } catch (e) {
+              // the built-in search tool was refused before any answer: remember it and search from the browser instead
+              if (e.webUnavailable && attempt === 0 && !acc && !prior && wantsSearch) { searchBroken.add(provider()); clearStatus(); await runFallback(); continue; }
+              throw e;
+            }
           }
           endThink(); clearStatus();
           paint();
@@ -2632,7 +2762,7 @@
       ctrl?.abort();
       gen++;
       page = null; convo = []; refs = []; queue = []; started = false; generating = false;
-      chatId = null; chatTitle = ""; usePage = !!srcUrl(); skill = null; formats = []; manage = false; webOn = false;
+      chatId = null; chatTitle = ""; usePage = !!srcUrl() && bool("attachpage", true); skill = null; formats = []; manage = false; webOn = false;
       closePop(); closeSheet(); clearNote();
       if (input) { input.value = ""; autosize(); }
       logEl.replaceChildren();
@@ -2651,14 +2781,14 @@
     // Called on any top-level navigation in the source tab (including YouTube's in-page video
     // switches). A different page/video starts a fresh chat (the old one stays in History);
     // otherwise just refresh the page pill.
-    function refreshAttach() { if (!started && !closed) renderPills(); }
+    function refreshAttach() { if (closed) return; if (!started) renderPills(); else updateWebBtn(); }
     function onNav() {
       if (closed) return;
       const key = srcKey();
       if (key === lastKey) { refreshAttach(); return; }
       lastKey = key;
       if (started || convo.length || page) newChat();
-      else { usePage = !!srcUrl(); logEl?.querySelector(".dia-empty") && (logEl.replaceChildren(), renderEmpty()); renderPills(); }
+      else { usePage = !!srcUrl() && bool("attachpage", true); logEl?.querySelector(".dia-empty") && (logEl.replaceChildren(), renderEmpty()); renderPills(); }
     }
 
     function build() {
@@ -2685,7 +2815,11 @@
           if (e.key === "Escape") { e.preventDefault(); closePop(); return; }
         }
         if (e.key === "Escape" && sheetEl) { closeSheet(); return; }
-        if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); e.stopPropagation(); submit(); }
+        if (e.key === "Enter" && !e.isComposing) {
+          // default: Enter sends, Shift+Enter adds a line. With "Enter sends" off it is ⌘/Ctrl+Enter that sends.
+          const send = bool("entersends", true) ? !e.shiftKey : e.metaKey || e.ctrlKey;
+          if (send) { e.preventDefault(); e.stopPropagation(); submit(); }
+        }
       });
       input.addEventListener("paste", (e) => {
         const fs = [...(e.clipboardData?.files || [])];
@@ -2832,8 +2966,9 @@
   window.addEventListener("fullscreen", onResize);
   gBrowser.tabContainer.addEventListener("TabSelect", onSelect);
   gBrowser.tabContainer.addEventListener("TabClose", onTabClose);
-  // keep the sidebar glued to the page area through split-view / sidebar / toolbar layout changes
-  const ticker = setInterval(() => { if ([...sessions.values()].some((s) => s.visible)) updateDock(); }, 600);
+  // settings take effect immediately (side, text size, colours, search mode, URL bar button…)
+  const prefObserver = { observe() { try { syncAll(); sessions.forEach((s) => s.refreshAttach()); applyUrlbarPref(); } catch (e) { console.warn("[dia-sidebar] settings", e); } } };
+  try { Services.prefs.addObserver(PREF, prefObserver); } catch (e) { console.warn("[dia-sidebar] settings observer", e); }
 
   const progressListener = {
     onLocationChange(browser, webProgress) {
@@ -2903,8 +3038,12 @@
       }
     } catch (e) { console.warn("[dia-sidebar] toolbar button", e); }
   }
+  function applyUrlbarPref() {
+    if (!bool("urlbarbutton", true)) { urlBtn?.remove(); urlBtn = null; return; }
+    if (!urlBtn?.isConnected) { try { mountUrlbarButton(); } catch (e) {} }
+  }
   try {
-    if (!mountUrlbarButton()) { // the URL bar may not be built yet this early in startup
+    if (bool("urlbarbutton", true) && !mountUrlbarButton()) { // the URL bar may not be built yet this early in startup
       let tries = 0;
       btnTimer = setInterval(() => {
         let done = false;
@@ -2918,12 +3057,11 @@
     toggle,
     destroy() {
       for (const s of [...sessions.values()]) s.close(true);
-      clearInterval(ticker);
+      try { Services.prefs.removeObserver(PREF, prefObserver); } catch {}
       if (btnTimer) clearInterval(btnTimer);
       urlBtn?.remove();
       styleEl.remove();
       dock?.remove();
-      document.getElementById("appcontent")?.style.removeProperty("margin-right");
       ctxMenu?.removeEventListener("popupshowing", onCtxShowing);
       ctxItem?.remove();
       window.removeEventListener("keydown", onKey, true);

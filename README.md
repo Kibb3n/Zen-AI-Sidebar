@@ -1,9 +1,11 @@
 # Dia Sidebar (Sine mod for Zen)
 
-A Dia-style AI chat sidebar for Zen, loaded as a userChrome.js mod via Sine. It docks on the right and
-**resizes the page** (it doesn't float over it). Click the **chat icon in the URL bar** (next to the
-bookmark star), or press **⌘E** (macOS) / **Ctrl+E** (Windows/Linux), to show or hide it. The icon lights up
-while the sidebar is open. Each tab keeps its own chat while the sidebar is hidden.
+A Dia-style AI chat sidebar for Zen, loaded as a userChrome.js mod via Sine. It is a **real sidebar**: it
+sits next to the page inside Zen's own layout, so the page gets narrower (nothing floats over it). It looks like
+part of Zen: it uses Zen's page-card radius and shadow, and its colours are taken from Zen's own theme tokens, so
+it follows each **space's colour** and Zen's light/dark setting. Click the **chat icon in the URL bar** (it appears
+when you hover the URL bar, next to the bookmark star), or press **⌘E** (macOS) / **Ctrl+E**, to show or hide it.
+Each tab keeps its own chat while the sidebar is hidden.
 
 > Forked from *Page Summary*. Both mods use ⌘E, so disable Page Summary before enabling this one.
 
@@ -42,30 +44,55 @@ Anthropic and Gemini read PDFs and images natively; Apple Intelligence is text-o
 
 ## Web search
 
-Click the **globe** button (or type **@Web**) to search the web for a chat. Answers show *Searched “…”* and
-the sources as chips under the answer, and open links in a new tab. How it works depends on the provider:
+Search is **automatic**, like Dia: ask about news, prices, scores, people, products, "latest" anything, or
+tell it to look something up, and the assistant searches by itself. Questions about the page, rewriting,
+translating and Skills don't trigger a search. The **globe** button (or **@Web**) forces a search for the
+whole chat. Answers show *Searched “…”* and the sources as chips under the answer. How it searches depends
+on the provider:
 
-- **Gemini** and **Anthropic** search with their own built-in tools, and by default decide on their own when
-  to (so you only pay for searches the model chooses to make). The globe button makes them always search.
-- **Apple Intelligence, OpenAI-compatible, Ollama and others** have no search tool, so the mod does it from
-  your browser: the model writes a query, the mod searches (DuckDuckGo by default, or Brave / your own
-  SearXNG in settings), reads the top three pages, and the answer cites them as clickable **[1] [2]**.
-  By default this happens only when the globe is on. In settings, *Web search → Automatic* adds a quick
-  check before each message so the model can decide on its own.
-- Settings → *Web search → Off* removes the button entirely. Fetched pages are never saved to history; only
-  the list of sources is.
+- **Gemini** (Google Search) and **Anthropic** (web search tool) use their own built-in tools and decide on
+  their own, and are told to search whenever a question needs it.
+- **Apple Intelligence, OpenAI-compatible, Ollama and others** have no search tool, so the mod searches from
+  your browser: the model writes a query, the mod searches (DuckDuckGo by default; Brave or your own SearXNG
+  in settings), reads the top three pages, and the answer cites them as clickable **[1] [2]**. Clearly
+  current questions ("today", "latest", "price of…") search immediately; for the rest, a quick check asks the
+  model whether a search is needed first.
+- If Gemini or Anthropic **refuse their search tool** (plan, region, model), the mod switches to the
+  browser-side search for the rest of the session instead of failing.
+- Settings → *Web search* can switch this to "only with the globe button" or Off. Fetched pages are never saved
+  to history, only the list of sources.
 
 ## AI backends (Sine → this mod → settings)
 
-- **Apple Intelligence (default).** On-device via afm-server (`http://127.0.0.1:11435/v1`). No key. Long pages
+- **Apple Intelligence (default).** On-device via afm-server (default `http://127.0.0.1:11435/v1`, change it with *Server address*). No key. Long pages
   are condensed to fit its small context.
 - **Anthropic (Claude).** Needs an API key. Supports PDFs, images, extended thinking and built-in web search.
-- **Google Gemini.** Needs an API key from Google AI Studio. Uses the native API (default model
-  `gemini-3.5-flash`, change it in settings) so it gets Google Search grounding, PDFs, images and thinking.
-  Pointing the *OpenAI-compatible* provider at Gemini's compatibility endpoint also works for chat, but that
-  endpoint has no web search, so prefer this provider.
+- **Google Gemini.** Needs an API key from Google AI Studio. Leave *Model* blank to always use the **newest
+  Gemini Flash** your key can access (it asks Google which models exist, so a retired model ID never breaks
+  chat); type `flash-lite` or `pro` for those families, or an exact ID such as `gemini-3.8-flash`. If a model
+  is unavailable it falls through to the next newest, and a model that rejects the thinking setting is retried
+  without it. Uses Google's native API for Google Search grounding, PDFs, images and thinking. Pointing the
+  *OpenAI-compatible* provider at Gemini's compatibility endpoint also works for plain chat, but that endpoint
+  has no search, so prefer this provider.
 - **Any OpenAI-compatible endpoint**: OpenAI, Groq, a local Ollama, and so on.
 - **No key / server unreachable.** Falls back to an instant offline extractive summary.
+
+## Settings
+
+Sine → this mod → settings. Everything is grouped and applies immediately (no restart). Fields that don't apply
+to your provider are hidden (for example, no API key box for Apple Intelligence).
+
+- **AI model**: provider, API key, model, server address, and whether to show the model's thinking.
+- **Chat**: answer length (concise / balanced / detailed), reply language, custom instructions, automatic
+  summaries, and whether Enter sends or adds a new line.
+- **Context**: attach the current page automatically, attach text selected on the page, YouTube timestamps.
+- **Web search**: automatic / only with the globe button / off, plus the search engine for models without
+  built-in search (DuckDuckGo, Brave, SearXNG).
+- **Appearance**: sidebar on the left or right, match your Zen space or use neutral colours, text size, and
+  whether the URL bar button is shown. Drag the sidebar's edge to resize it (double-click the edge to reset).
+- **Privacy**: save chat history or not. **Advanced**: the Summarize instruction and the page-text limit.
+
+Settings from earlier versions (separate server addresses, search key fields) still work as a fallback.
 
 ## Not included
 
@@ -90,7 +117,7 @@ reinstall from a repo (above), or save this script over the old one under its or
 ## If nothing appears
 
 1. Hover the URL bar at the top of the sidebar: the chat icon appears on hover (like Zen's other URL bar
-   icons) and stays lit while the sidebar is open. No icon at all means the script isn't running: check
+   icons) and gets a subtle highlight while the sidebar is open. No icon at all means the script isn't running: check
    the two Sine steps above.
 2. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see
    `[dia-sidebar] loaded v2.0.0`. A wrong script filename shows up as `[Sine]: Failed to load script`. If
