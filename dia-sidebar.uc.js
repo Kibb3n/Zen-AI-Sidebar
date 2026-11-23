@@ -92,6 +92,9 @@
     folder: "M2.5 4.5h4l1.2 1.5h5.8v6.5h-11z",
     play: "M5.5 3.8v8.4L12 8z",
     check: "M3.5 8.5l3 3 6-6.5",
+    sidebar: "M3.5 3h9A1.5 1.5 0 0 1 14 4.5v7a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5v-7A1.5 1.5 0 0 1 3.5 3zM9.5 3v10M11.4 6.2v3.6",
+    chevs: "M5.5 6.3L8 3.8l2.5 2.5M5.5 9.7L8 12.2l2.5-2.5",
+    camera: "M2 6.4A1.4 1.4 0 0 1 3.4 5h1.5l.9-1.5h4.4l.9 1.5h1.5A1.4 1.4 0 0 1 14 6.4v5.2a1.4 1.4 0 0 1-1.4 1.4H3.4A1.4 1.4 0 0 1 2 11.6zM8 10.6a2.1 2.1 0 1 0 0-4.2 2.1 2.1 0 0 0 0 4.2z",
     globe: "M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zM2.5 8h11M8 2.5c1.6 1.5 2.4 3.4 2.4 5.5S9.6 12 8 13.5C6.4 12 5.6 10.1 5.6 8S6.4 4 8 2.5z",
     drop: "M8 11V3M4.5 6.5L8 3l3.5 3.5M3 11.5v1A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5v-1",
   };
@@ -102,9 +105,11 @@
 #dia-dock {
   /* Colours come from Zen's own tokens, so the sidebar follows every space (--zen-primary-color) and Zen's own
      light/dark setting (light-dark). The fallbacks keep it neutral in plain Firefox. */
-  --fg: var(--zen-branding-bg-reverse, light-dark(#18181b, #f2f2f4));
-  --bg: var(--zen-colors-tertiary, light-dark(#fafafa, #19191b));
-  --card: var(--zen-browser-content-background, light-dark(#ffffff, #242427));
+  --fg: var(--toolbar-color, light-dark(#18181b, #f2f2f4));
+  --panel: var(--zen-main-browser-background, var(--toolbar-bgcolor, light-dark(#f3f3f5, #1b1b1d)));
+  --card: color-mix(in srgb, var(--fg) 9%, transparent);
+  --glass: color-mix(in srgb, var(--fg) 12%, transparent);
+  --pop: light-dark(color-mix(in srgb, var(--tint) 12%, #ffffff), color-mix(in srgb, var(--tint) 16%, #18191b));
   --tint: var(--zen-primary-color, #6b7cff);
   --accent: light-dark(color-mix(in srgb, var(--tint) 80%, black), color-mix(in srgb, var(--tint) 70%, white));
   --on-accent: light-dark(#ffffff, #101010);
@@ -114,12 +119,12 @@
   --soft2: color-mix(in srgb, var(--fg) 9%, transparent);
   --mute: color-mix(in srgb, var(--fg) 52%, transparent);
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  &[data-accent="neutral"] { --tint: light-dark(#5b6b86, #b8c4d9); --bg: light-dark(#f7f7f8, #18181a); }
+  &[data-accent="neutral"] { --tint: light-dark(#5b6b86, #b8c4d9); --panel: light-dark(#f4f4f5, #1a1a1c); }
   /* a real sidebar: an in-flow flex item next to the tab box, styled like Zen's own page card */
   position: relative; flex: 0 0 var(--dia-w, 400px); width: var(--dia-w, 400px); min-width: 0; align-self: stretch;
   margin-inline-start: var(--zen-element-separation, 8px);
   box-sizing: border-box; display: flex; flex-direction: column;
-  color: var(--fg); background: var(--bg);
+  color: var(--fg); background: var(--panel); background-attachment: fixed;
   font: var(--dia-fs, 14px)/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased;
   border-radius: calc(var(--zen-native-inner-radius, 12px) / var(--zen-squircle-value, 1)); corner-shape: round;
   box-shadow: var(--zen-big-shadow, 0 2px 10px rgba(0, 0, 0, 0.14));
@@ -144,13 +149,17 @@
   .dia-svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   .dia-svg-fill { fill: currentColor; stroke: none; }
 
-  /* header: just a title and three quiet icons */
-  .dia-head { display: flex; align-items: center; gap: 8px; flex: none; padding: 12px 10px 4px 18px; }
-  .dia-title { flex: 1; min-width: 0; font-weight: 600; font-size: 13px; letter-spacing: -0.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .dia-head-right { display: flex; gap: 0; }
-  .dia-icon { appearance: none; background: transparent; border: 0; cursor: pointer; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; color: var(--mute); transition: background-color 0.15s, color 0.15s, transform 0.15s var(--ease); }
+  /* header, like Dia: new chat on the left; layout menu and close on the right. No title. */
+  .dia-head { display: flex; align-items: center; justify-content: space-between; flex: none; padding: 14px 14px 6px 16px; }
+  .dia-head-right { display: flex; align-items: center; gap: 4px; }
+  .dia-icon { appearance: none; background: transparent; border: 0; cursor: pointer; width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; color: var(--mute); transition: background-color 0.15s, color 0.15s, transform 0.15s var(--ease); }
   .dia-icon:hover { background: var(--soft); color: var(--fg); }
   .dia-icon:active { transform: scale(0.92); }
+  .dia-head .dia-icon { width: 34px; height: 34px; border-radius: 12px; }
+  .dia-head .dia-icon .dia-svg { width: 20px; height: 20px; }
+  .dia-head .dia-layout { width: auto; padding: 0 6px 0 8px; display: inline-flex; align-items: center; gap: 1px; }
+  .dia-head .dia-layout .dia-svg:last-child { width: 13px; height: 13px; }
+  .dia-hmenu { top: 54px; right: 12px; left: auto; bottom: auto; width: 232px; }
 
   /* conversation */
   .dia-log { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--soft2) transparent; display: flex; flex-direction: column; gap: 22px; padding: 10px 18px 18px; }
@@ -186,7 +195,7 @@
 
   /* your messages */
   .dia-ug { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: 88%; position: relative; }
-  .dia-ubub { padding: 8px 14px; border-radius: 18px 18px 6px 18px; white-space: pre-wrap; overflow-wrap: anywhere; background: color-mix(in srgb, var(--tint) 15%, var(--bg)); }
+  .dia-ubub { padding: 8px 14px; border-radius: 18px 18px 6px 18px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--glass); }
   .dia-ug-tools { position: absolute; left: -30px; bottom: 0; opacity: 0; transition: opacity 0.15s; }
   .dia-ug:hover .dia-ug-tools { opacity: 1; }
   .dia-sent { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
@@ -231,29 +240,32 @@
   .dia-act ul { margin: 0 0 10px; padding-inline-start: 18px; } .dia-act li { margin: 0 0 3px; }
   .dia-act-row { display: flex; gap: 6px; align-items: center; }
 
-  /* empty state */
-  .dia-empty { margin: auto 0; padding: 0 2px; display: flex; flex-direction: column; gap: 18px; animation: dia-in 0.5s var(--ease) both; }
-  .dia-empty-head { display: flex; flex-direction: column; gap: 4px; }
-  .dia-empty-head h2 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.02em; }
-  .dia-empty-head p { margin: 0; color: var(--mute); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dia-skills { display: flex; flex-direction: column; gap: 1px; margin: 0 -10px; }
-  .dia-skill { appearance: none; background: transparent; border: 0; text-align: start; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: 12px; transition: background-color 0.15s; }
-  .dia-skill:hover { background: var(--soft); }
-  .dia-skill .dia-svg { color: var(--mute); }
-  .dia-skill small { margin-inline-start: auto; color: var(--mute); font-size: 11.5px; }
-
-  /* composer */
-  .dia-foot { flex: none; padding: 4px 14px 14px; }
-  .dia-composer { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 12px 10px 8px 14px; border: 1px solid var(--line); border-radius: 18px; background: var(--card); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); transition: border-color 0.2s, box-shadow 0.25s; }
-  .dia-composer:focus-within { border-color: color-mix(in srgb, var(--fg) 24%, transparent); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 3px var(--soft); }
+  /* composer, like Dia: one big rounded card (capture cards, the box, then + / tab pill / camera / send) */
+  .dia-foot { flex: none; padding: 6px 14px 14px; }
+  .dia-composer { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 12px 12px 10px 14px; border: 1px solid var(--line); border-radius: 26px; background: var(--glass); backdrop-filter: blur(14px); transition: border-color 0.2s; }
+  .dia-composer:focus-within { border-color: color-mix(in srgb, var(--fg) 28%, transparent); }
+  .dia-cards { display: flex; flex-wrap: wrap; gap: 8px; max-height: 196px; overflow-y: auto; scrollbar-width: thin; }
+  .dia-cards:empty { display: none; }
+  .dia-card { position: relative; display: flex; align-items: center; gap: 12px; max-width: 100%; box-sizing: border-box; padding: 8px 36px 8px 8px; border-radius: 16px; background: var(--glass); animation: dia-in 0.25s var(--ease) both; }
+  .dia-card-thumb { width: 38px; height: 48px; flex: none; border-radius: 9px; overflow: hidden; display: grid; place-items: center; background: var(--soft2); color: var(--mute); }
+  .dia-card-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+  .dia-card-thumb img.dia-card-fav { width: 20px; height: 20px; object-fit: contain; border-radius: 4px; }
+  .dia-card-text { min-width: 0; display: flex; flex-direction: column; justify-content: center; line-height: 1.3; }
+  .dia-card-title { font-size: 14.5px; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dia-card-sub { font-size: 13px; color: var(--mute); }
+  .dia-card-x { position: absolute; top: 6px; right: 6px; appearance: none; border: 0; background: var(--soft2); cursor: pointer; width: 20px; height: 20px; padding: 0; border-radius: 50%; display: grid; place-items: center; opacity: 0; transition: opacity 0.15s; }
+  .dia-card:hover .dia-card-x { opacity: 0.9; }
+  .dia-card-x:hover { opacity: 1 !important; }
+  .dia-card-x .dia-svg { width: 11px; height: 11px; }
+  .dia-card.dia-locked .dia-card-x { display: none; }
   .dia-pills { display: flex; flex-wrap: wrap; gap: 5px; max-height: 74px; overflow-y: auto; scrollbar-width: thin; }
   .dia-pills:empty { display: none; }
-  .dia-pill { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; box-sizing: border-box; padding: 3px 4px 3px 7px; border-radius: 9px; font-size: 12px; line-height: 1.3; background: var(--soft); animation: dia-in 0.25s var(--ease) both; }
+  .dia-pill { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; box-sizing: border-box; padding: 3px 4px 3px 7px; border-radius: 9px; font-size: 12px; line-height: 1.3; background: var(--soft2); animation: dia-in 0.25s var(--ease) both; }
   .dia-pill > .dia-svg { width: 13px; height: 13px; color: var(--mute); }
   .dia-pill img.dia-pill-ico { width: 14px; height: 14px; border-radius: 3px; flex: none; }
   .dia-pill img.dia-pill-thumb { width: 20px; height: 20px; border-radius: 5px; object-fit: cover; flex: none; }
   .dia-pill-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
-  .dia-pill.dia-skillpill { background: color-mix(in srgb, var(--accent) 13%, transparent); color: color-mix(in srgb, var(--accent) 80%, var(--fg)); }
+  .dia-pill.dia-skillpill { background: color-mix(in srgb, var(--accent) 18%, transparent); }
   .dia-pill.dia-skillpill > .dia-svg { color: var(--accent); }
   .dia-pill-x { appearance: none; border: 0; background: transparent; cursor: pointer; width: 16px; height: 16px; padding: 0; border-radius: 50%; display: grid; place-items: center; opacity: 0.45; }
   .dia-pill-x:hover { opacity: 1; background: var(--soft2); }
@@ -263,21 +275,32 @@
   .dia-sent .dia-pill { padding-inline-end: 8px; }
   .dia-input, .dia-input:hover, .dia-input:focus, .dia-input:focus-visible {
     appearance: none !important; -moz-default-appearance: none !important; background: transparent !important; border: 0 !important; border-radius: 0 !important;
-    outline: 0 !important; box-shadow: none !important; resize: none; width: 100%; box-sizing: border-box; color: inherit; font: inherit;
-    margin: 0; padding: 0 !important; max-height: 160px; min-height: 1.6em; scrollbar-width: thin; }
-  .dia-input::placeholder { color: inherit; opacity: 0.42; }
-  .dia-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
-  .dia-add { width: 28px; height: 28px; }
-  .dia-send { appearance: none; border: 0; cursor: pointer; flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--on-accent); transition: transform 0.15s var(--ease), opacity 0.15s; }
-  .dia-send .dia-svg { width: 15px; height: 15px; }
+    outline: 0 !important; box-shadow: none !important; resize: none; width: 100%; box-sizing: border-box; color: inherit; font: inherit; font-size: calc(var(--dia-fs, 14px) + 1px);
+    margin: 0; padding: 2px 0 !important; max-height: 160px; min-height: 1.7em; scrollbar-width: thin; }
+  .dia-input::placeholder { color: inherit; opacity: 0.5; }
+  .dia-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .dia-row-left { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+  .dia-row-right { display: flex; align-items: center; gap: 6px; flex: none; }
+  .dia-add, .dia-cam { width: 34px; height: 34px; flex: none; border-radius: 50%; }
+  .dia-add .dia-svg, .dia-cam .dia-svg { width: 20px; height: 20px; }
+  .dia-tabpill { appearance: none; display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; box-sizing: border-box; padding: 4px 16px 4px 5px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--fg) 22%, transparent); background: transparent; color: inherit; cursor: pointer; font-size: 14px; transition: background-color 0.15s, opacity 0.15s; }
+  .dia-tabpill:hover { background: var(--soft); }
+  .dia-tabpill[hidden] { display: none; }
+  .dia-tabpill.dia-off { opacity: 0.5; border-style: dashed; }
+  .dia-tabpill.dia-fixed { cursor: default; pointer-events: none; }
+  .dia-tabpill .dia-tabfav { width: 24px; height: 24px; flex: none; border-radius: 8px; background: var(--soft2); display: grid; place-items: center; overflow: hidden; color: var(--mute); }
+  .dia-tabpill .dia-tabfav img { width: 16px; height: 16px; border-radius: 4px; }
+  .dia-tabpill .dia-tabfav .dia-svg { width: 14px; height: 14px; }
+  .dia-tabpill > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dia-chip { appearance: none; border: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 5px 11px 5px 9px; border-radius: 999px; font-size: 13px; color: inherit; background: color-mix(in srgb, var(--accent) 20%, transparent); }
+  .dia-chip[hidden] { display: none; }
+  .dia-chip .dia-svg { width: 14px; height: 14px; color: var(--accent); }
+  .dia-send { appearance: none; border: 0; cursor: pointer; flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--on-accent); transition: transform 0.15s var(--ease), opacity 0.15s; }
+  .dia-send .dia-svg { width: 18px; height: 18px; stroke-width: 2; }
   .dia-send:not([disabled]):hover { transform: scale(1.07); }
   .dia-send:active { transform: scale(0.92); }
-  .dia-send[disabled] { opacity: 0.2; cursor: default; }
+  .dia-send[disabled] { opacity: 0.3; cursor: default; }
   .dia-addnote { font-size: 12px; color: var(--mute); padding: 0 2px; animation: dia-fade 0.3s ease both; }
-
-  .dia-row-left { display: flex; align-items: center; gap: 2px; }
-  .dia-web[hidden] { display: none; }
-  .dia-web.dia-on { color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); }
 
   /* web sources */
   .dia-sources { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 12px; color: var(--mute); animation: dia-fade 0.4s ease both; }
@@ -300,7 +323,7 @@
   .dia-drop .dia-dropzone { opacity: 1; transform: none; }
 
   /* popup menu (slash skills, @ mentions, + menu) */
-  .dia-menu { position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; z-index: 10; max-height: 300px; overflow-y: auto; scrollbar-width: thin; padding: 5px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 14px 38px rgba(0, 0, 0, 0.18); animation: dia-in 0.2s var(--ease) both; }
+  .dia-menu { position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; z-index: 10; max-height: 300px; overflow-y: auto; scrollbar-width: thin; padding: 5px; background: var(--pop); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 14px 38px rgba(0, 0, 0, 0.28); animation: dia-in 0.2s var(--ease) both; }
   .dia-menu-sep { font-size: 11px; color: var(--mute); padding: 8px 10px 3px; letter-spacing: 0.02em; }
   .dia-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; text-align: start; appearance: none; border: 0; cursor: pointer; background: transparent; padding: 7px 10px; border-radius: 9px; font-size: 13px; }
   .dia-menu-item:hover, .dia-menu-item.dia-active { background: var(--soft); }
@@ -310,7 +333,7 @@
   .dia-menu-sub { color: var(--mute); font-size: 11.5px; white-space: nowrap; }
 
   /* history / skills sheet */
-  .dia-sheet { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; background: var(--bg); animation: dia-in 0.25s var(--ease) both; }
+  .dia-sheet { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; background: var(--panel); background-attachment: fixed; border-radius: inherit; animation: dia-in 0.25s var(--ease) both; }
   .dia-sheet-head { display: flex; align-items: center; gap: 6px; padding: 12px 10px 6px 18px; font-weight: 600; font-size: 13px; }
   .dia-sheet-head span { flex: 1; }
   .dia-sheet-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 2px; }
@@ -340,19 +363,21 @@
 @keyframes dia-fade { from { opacity: 0; } to { opacity: 1; } }
 /* the chat button inside the URL bar (in Zen, the URL bar sits at the top of the left sidebar).
    Icon: Ionicons "chatbubble-ellipses" (MIT), the glyph Zen ships for its own chat icon.
-   It adds NO colour or opacity of its own: like Zen's built-in URL bar icons it takes both from the URL bar
-   (white in dark toolbars). It is hidden until you hover the URL bar, which Zen already does for every
-   .urlbar-page-action in its sidebar layout; the opacity rules below cover other layouts. */
+   It is drawn as a mask filled with Zen's toolbar text colour (white in dark spaces), so it does not depend on
+   context-fill working, and it can't pick up any other colour. Hidden until you hover the URL bar. */
 #dia-sidebar-urlbar { margin-inline: 1px; }
 #dia-sidebar-urlbar:not([open]) { opacity: 0; transition: opacity 0.15s; }
 #urlbar:hover #dia-sidebar-urlbar, #urlbar[focused] #dia-sidebar-urlbar, #dia-sidebar-urlbar:hover, #dia-sidebar-urlbar[open] { opacity: 1; }
 #dia-sidebar-urlbar .urlbar-icon {
-  list-style-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='context-fill' fill-opacity='context-fill-opacity'%3E%3Cpath d='M 398,81.84 A 227.4,227.4 0 0 0 255.82,32 C 194.9,32 138,55.47 95.46,98.09 54.35,139.33 31.82,193.78 32,251.37 a 215.66,215.66 0 0 0 35.65,118.76 l 0.19,0.27 c 0.28,0.41 0.57,0.82 0.86,1.22 0.29,0.4 0.65,0.92 0.73,1.05 l 0.22,0.4 c 1.13,2 2,4.44 1.23,6.9 l -18.42,66.66 a 29.13,29.13 0 0 0 -1.2,7.63 25.69,25.69 0 0 0 25.57,25.74 29.44,29.44 0 0 0 10.45,-2.29 l 67.49,-24.36 0.85,-0.33 a 14.75,14.75 0 0 1 5.8,-1.15 15.12,15.12 0 0 1 5.37,1 c 1.62,0.63 16.33,6.26 31.85,10.6 12.9,3.6 39.74,9 60.77,9 59.65,0 115.35,-23.1 156.83,-65.06 C 457.36,365.77 480,310.42 480,251.49 a 213.5,213.5 0 0 0 -4.78,-45 C 464.88,157.87 437.46,113.59 398,81.84 Z M 87.48,380 Z M 160,288 a 32,32 0 1 1 32,-32 32,32 0 0 1 -32,32 z m 96,0 a 32,32 0 1 1 32,-32 32,32 0 0 1 -32,32 z m 96,0 a 32,32 0 1 1 32,-32 32,32 0 0 1 -32,32 z'/%3E%3C/svg%3E");
-  -moz-context-properties: fill, fill-opacity; fill: currentColor;
-  width: 16px; height: 16px;
+  list-style-image: none !important;
+  width: 16px; height: 16px; box-sizing: border-box;
+  background-color: var(--toolbar-color, currentColor) !important;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='black'%3E%3Cpath d='M 398,81.84 A 227.4,227.4 0 0 0 255.82,32 C 194.9,32 138,55.47 95.46,98.09 54.35,139.33 31.82,193.78 32,251.37 a 215.66,215.66 0 0 0 35.65,118.76 l 0.19,0.27 c 0.28,0.41 0.57,0.82 0.86,1.22 0.29,0.4 0.65,0.92 0.73,1.05 l 0.22,0.4 c 1.13,2 2,4.44 1.23,6.9 l -18.42,66.66 a 29.13,29.13 0 0 0 -1.2,7.63 25.69,25.69 0 0 0 25.57,25.74 29.44,29.44 0 0 0 10.45,-2.29 l 67.49,-24.36 0.85,-0.33 a 14.75,14.75 0 0 1 5.8,-1.15 15.12,15.12 0 0 1 5.37,1 c 1.62,0.63 16.33,6.26 31.85,10.6 12.9,3.6 39.74,9 60.77,9 59.65,0 115.35,-23.1 156.83,-65.06 C 457.36,365.77 480,310.42 480,251.49 a 213.5,213.5 0 0 0 -4.78,-45 C 464.88,157.87 437.46,113.59 398,81.84 Z M 87.48,380 Z M 160,288 a 32,32 0 1 1 32,-32 32,32 0 0 1 -32,32 z m 96,0 a 32,32 0 1 1 32,-32 32,32 0 0 1 -32,32 z m 96,0 a 32,32 0 1 1 32,-32 32,32 0 0 1 -32,32 z'/%3E%3C/svg%3E"); mask-repeat: no-repeat; mask-position: center; mask-size: 16px 16px;
+  opacity: 0.9; transition: opacity 0.15s;
 }
+#dia-sidebar-urlbar:hover .urlbar-icon, #dia-sidebar-urlbar[open] .urlbar-icon { opacity: 1; }
 /* while the sidebar is open: a neutral highlight behind the (still white) icon */
-#dia-sidebar-urlbar[open] { background-color: color-mix(in srgb, currentColor 14%, transparent); border-radius: var(--urlbar-icon-border-radius, 6px); }
+#dia-sidebar-urlbar[open] { background-color: color-mix(in srgb, var(--toolbar-color, currentColor) 14%, transparent); border-radius: var(--urlbar-icon-border-radius, 6px); }
 @media (prefers-reduced-motion: reduce) {
   #dia-dock, #dia-dock * { animation-duration: 1ms !important; animation-delay: 0s !important; transition-duration: 1ms !important; }
 }
@@ -1660,14 +1685,14 @@
   // ---------- attachment pills ----------
   const refMeta = (r) => {
     switch (r.kind) {
-      case "tab": return { label: r.label || hostOf(r.url) || "Tab", image: r.image, ico: "page", tip: r.url, locked: r.locked };
-      case "clip": return { label: "Pasted text", ico: "copy", tip: (r.text || "").slice(0, 300) };
-      case "file": return { label: r.label, ico: "clip", tip: r.label };
-      case "pdf": return { label: r.label, ico: "page", tip: r.label };
-      case "image": return { label: r.label, thumb: r.dataUrl, ico: "page", tip: r.label };
+      case "tab": return { label: r.label || hostOf(r.url) || "Tab", sub: hostOf(r.url) || "Tab", image: r.image, ico: "page", tip: r.url, locked: r.locked };
+      case "clip": return { label: "Pasted text", sub: "Clipboard", ico: "copy", tip: (r.text || "").slice(0, 300) };
+      case "file": return { label: r.label, sub: "File", ico: "clip", tip: r.label };
+      case "pdf": return { label: r.label, sub: "PDF", ico: "page", tip: r.label };
+      case "image": return { label: r.label, sub: r.capture ? "Capture" : "Image", thumb: r.dataUrl, ico: "page", tip: r.label };
       default: {
         const t = (r.text || "").trim();
-        return { label: "“" + t.slice(0, 28) + (t.length > 28 ? "…" : "") + "”", ico: "chat", tip: t.slice(0, 400) };
+        return { label: "“" + t.slice(0, 40) + (t.length > 40 ? "…" : "") + "”", sub: "Selection", ico: "chat", tip: t.slice(0, 400) };
       }
     }
   };
@@ -1679,6 +1704,38 @@
     el.append(h("span", { className: "dia-pill-label", textContent: d.label }));
     if (onRemove) el.append(h("button", { className: "dia-pill-x", title: "Remove", onclick: (e) => { e.stopPropagation(); onRemove(); } }, icon("close")));
     return el;
+  }
+
+  // a context card, like Dia's: picture (or icon) + title + a small subtitle (Capture, File, the site…)
+  function card(d, onRemove) {
+    const el = h("div", { className: "dia-card" + (d.locked ? " dia-locked" : ""), title: d.tip || d.label || "" });
+    const thumb = h("div", { className: "dia-card-thumb" });
+    if (d.thumb) thumb.append(h("img", { src: d.thumb }));
+    else if (d.image) thumb.append(h("img", { className: "dia-card-fav", src: d.image, onerror: (e) => e.target.replaceWith(icon(d.ico || "page")) }));
+    else thumb.append(icon(d.ico || "page"));
+    el.append(thumb, h("div", { className: "dia-card-text" },
+      h("div", { className: "dia-card-title", textContent: d.label }),
+      h("div", { className: "dia-card-sub", textContent: d.sub || "" })));
+    if (onRemove) el.append(h("button", { className: "dia-card-x", title: "Remove", onclick: (e) => { e.stopPropagation(); onRemove(); } }, icon("close")));
+    return el;
+  }
+  // screenshot of a tab: the full image (sent to the model) plus a small thumbnail for the card
+  async function captureBrowser(b) {
+    try {
+      const r = b.getBoundingClientRect();
+      if (r.width < 50 || r.height < 50) return null;
+      const bmp = await b.drawSnapshot(0, 0, r.width, r.height, Math.min(1, 1280 / r.width), "white");
+      const draw = (w, hh, q) => {
+        const c = document.createElementNS(NS, "canvas");
+        c.width = w; c.height = hh;
+        c.getContext("2d").drawImage(bmp, 0, 0, w, hh);
+        return c.toDataURL("image/jpeg", q);
+      };
+      const full = draw(bmp.width, bmp.height, 0.8);
+      const thumb = draw(120, Math.max(1, Math.round((bmp.height * 120) / bmp.width)), 0.7);
+      bmp.close?.();
+      return { b64: full.split(",")[1], thumb };
+    } catch (e) { return null; }
   }
 
   // ---------- helpers for files ----------
@@ -1738,7 +1795,7 @@
 
   // ---------- per-tab session ----------
   function makeSession(src) {
-    let panel, logEl, input, sendBtn, pillsEl, composerEl, titleEl, sheetEl = null;
+    let panel, logEl, input, sendBtn, pillsEl, cardsEl, tabPillEl, webPillEl, composerEl, titleEl, sheetEl = null;
     let started = false, busy = false, generating = false, stopped = false, closed = false, userHidden = false, wantFocus = false;
     let page = null, convo = [], refs = [], ctrl = null, gen = 0, refSeq = 0, chatId = null, chatTitle = "";
     let usePage = true, skill = null, formats = [], manage = false, webOn = false; // webOn: the globe button
@@ -1812,17 +1869,31 @@
       return { url, label, image: src.image };
     };
 
+    // the current page, shown as a pill in the bottom row: its site name and icon. Click to leave it out.
+    function renderTabPill(pd) {
+      if (!tabPillEl) return;
+      const show = !!pd && !(page && page.none);
+      tabPillEl.hidden = !show;
+      if (!show) return;
+      const host = hostOf(pd.url) || pd.label;
+      tabPillEl.classList.toggle("dia-off", !usePage && !started);
+      tabPillEl.classList.toggle("dia-fixed", started);
+      tabPillEl.title = started ? pd.label : usePage ? "This page is used as context. Click to leave it out." : "Click to use this page as context";
+      const fav = h("span", { className: "dia-tabfav" });
+      if (pd.image) fav.append(h("img", { src: pd.image, onerror: (e) => e.target.replaceWith(icon("page")) })); else fav.append(icon("page"));
+      tabPillEl.replaceChildren(fav, h("span", { textContent: host }));
+    }
     function renderPills() {
       if (!pillsEl) return;
       const els = [];
       const pd = pageData();
-      if (!started && usePage && pd) els.push(pill({ label: pd.label, image: pd.image, ico: "page", tip: pd.url }, () => { usePage = false; renderPills(); }));
-      for (const r of refs) els.push(pill(refMeta(r), r.locked ? null : () => { refs = refs.filter((x) => x.id !== r.id); renderPills(); }));
+      cardsEl.replaceChildren(...refs.map((r) => card(refMeta(r), r.locked ? null : () => { refs = refs.filter((x) => x.id !== r.id); renderPills(); })));
       if (skill) els.push(pill({ label: skill.name, ico: "spark" }, () => { skill = null; renderPills(); }, "dia-skillpill"));
       for (const f of formats) els.push(pill({ label: "@" + f.name, ico: "edit", tip: f.hint }, () => { formats = formats.filter((x) => x !== f); renderPills(); }));
       if (manage) els.push(pill({ label: "Manage tabs", ico: "folder" }, () => { manage = false; renderPills(); }));
       pillsEl.replaceChildren(...els);
-      if (input) input.placeholder = isVid() && usePage ? "Ask about this video…" : usePage && pd ? "Ask about this page…" : "Ask anything…";
+      renderTabPill(pd);
+      if (input) input.placeholder = isVid() && usePage ? "Ask a question about this video..." : usePage && pd ? "Ask a question about this page..." : "Ask anything...";
       updateSend();
       updateWebBtn();
     }
@@ -1875,6 +1946,17 @@
       const t = readClipboard().replace(/\s+/g, " ").trim();
       if (!t) { flashNote("Clipboard is empty (or not text)."); return; }
       addContext({ kind: "clip", label: "Pasted", text: t.slice(0, 8000) });
+    }
+
+    // the camera button: attach a screenshot of the page (for models that can see images)
+    async function addCapture() {
+      if (!srcUrl() && !src.linkedBrowser) return;
+      if (!canSeeFiles()) flashNote("The on-device model can't see images. Pick another provider in settings.");
+      else flashNote("Capturing…", true);
+      const cap = await captureBrowser(src.linkedBrowser);
+      if (!cap) { flashNote("Couldn't capture this page."); return; }
+      if (canSeeFiles()) clearNote();
+      addContext({ kind: "image", capture: true, label: src.label || hostOf(srcUrl()) || "Page", url: srcUrl() || "", mime: "image/jpeg", b64: cap.b64, dataUrl: cap.thumb, text: "[capture of " + (src.label || "the page") + "]" });
     }
 
     async function addTab(tab, locked = false) {
@@ -2094,6 +2176,7 @@
         { label: "Paste clipboard text", ico: "copy", run: pasteCard },
       ];
       if (!usePage && !started && srcUrl()) items.push({ label: "Add this page", ico: "page", run: () => { usePage = true; renderPills(); } });
+      if (webMode() !== "off") items.push({ label: webOn ? "Turn off web search" : "Search the web", ico: "globe", run: () => setWeb(!webOn) });
       if (tabs.length) items.push({ sep: "Add a tab  ·  or type @" }, ...tabItems(tabs));
       items.push({ sep: "Skills  ·  or type /" }, { label: "Browse skills…", ico: "spark", run: () => openSkills() }, { label: "New skill…", ico: "plus", run: () => openSkills(true) });
       items.push({ sep: "Tools" }, ...toolItems(""));
@@ -2108,15 +2191,11 @@
       if (m) return atMenu(caret - m[1].length - 1, m[1].toLowerCase());
       if (pop && pop.trigger !== "plus") closePop();
     }
-    // the globe button: searches the web for this chat (in "auto" mode Anthropic/Gemini already decide on their own)
-    let webBtn = null;
+    // "Search the web" (+ menu or @Web) forces a web search for this chat and shows a small Web chip in the bottom row.
+    // In "auto" mode Anthropic/Gemini already decide on their own.
     function updateWebBtn() {
-      if (!webBtn) return;
-      const mode = webMode();
-      webBtn.hidden = mode === "off";
-      webBtn.classList.toggle("dia-on", webOn);
-      webBtn.title = webOn ? "Web search is on for this chat (click to turn off)"
-        : mode === "auto" ? "Web search: automatic. Click to always search" : "Web search is off. Click to turn on";
+      if (!webPillEl) return;
+      webPillEl.hidden = !(webOn && webMode() !== "off");
     }
     function setWeb(on) {
       webOn = !!on;
@@ -2617,6 +2696,7 @@
       if (!page) {
         if (snap.usePage) { startFirst(entry); return; }
         page = { none: true, title: "", url: "", text: "" }; // chatting without a page
+        renderPills();
       }
       convo.push(entry);
       generate();
@@ -2744,16 +2824,24 @@
     }
 
     // ----- conversation lifecycle -----
-    function renderEmpty() {
-      const vid = isVid();
-      const pd = pageData();
-      const items = skillsFor(vid).slice(0, 9);
-      logEl.append(h("div", { className: "dia-empty" },
-        h("div", { className: "dia-empty-head" },
-          h("h2", { textContent: vid ? "Chat with this video" : pd ? "Chat with this page" : "How can I help?" }),
-          h("p", { textContent: pd ? pd.label : "Ask anything, or drop in files and tabs" })),
-        h("div", { className: "dia-skills" }, ...items.map((s) =>
-          h("button", { className: "dia-skill", title: (s.prompt || "").slice(0, 200), onclick: () => runSkill(s) }, icon("spark"), h("span", { textContent: s.name }), s.custom ? h("small", { textContent: "yours" }) : "")))));
+    // Dia shows nothing in an empty chat: no greeting, no suggestions. Skills live behind / and the header menu.
+    function renderEmpty() {}
+
+    // the header's layout button opens a small menu: history, skills, and which side the sidebar is on
+    let hmenu = null;
+    function onHDown(e) { if (hmenu && !hmenu.contains(e.target) && !e.target.closest(".dia-layout")) closeHMenu(); }
+    function closeHMenu() { hmenu?.remove(); hmenu = null; document.removeEventListener("pointerdown", onHDown, true); }
+    function openHeaderMenu() {
+      if (hmenu) { closeHMenu(); return; }
+      closePop();
+      const row = (ico, label, fn) => h("button", { className: "dia-menu-item", onclick: () => { closeHMenu(); fn(); } }, icon(ico), h("span", { className: "dia-menu-label", textContent: label }));
+      hmenu = h("div", { className: "dia-menu dia-hmenu" },
+        row("history", "Chat history", () => openHistory()),
+        row("spark", "Skills", () => openSkills()),
+        h("div", { className: "dia-menu-sep", textContent: "Layout" }),
+        row("sidebar", dockSide() === "left" ? "Move sidebar to the right" : "Move sidebar to the left", () => { setPref("side", dockSide() === "left" ? "right" : "left"); updateDock(); }));
+      panel.append(hmenu);
+      setTimeout(() => document.addEventListener("pointerdown", onHDown, true), 0);
     }
 
     // keepSplit: re-attach the other split pane(s) as locked pills. open() passes false because it
@@ -2763,7 +2851,7 @@
       gen++;
       page = null; convo = []; refs = []; queue = []; started = false; generating = false;
       chatId = null; chatTitle = ""; usePage = !!srcUrl() && bool("attachpage", true); skill = null; formats = []; manage = false; webOn = false;
-      closePop(); closeSheet(); clearNote();
+      closePop(); closeHMenu(); closeSheet(); clearNote();
       if (input) { input.value = ""; autosize(); }
       logEl.replaceChildren();
       setBusy(false);
@@ -2793,17 +2881,15 @@
 
     function build() {
       ensureDock();
-      const btn = (ico, title, fn) => h("button", { className: "dia-icon", title, onclick: fn }, icon(ico));
-      titleEl = h("span", { textContent: "Chat" });
       const head = h("div", { className: "dia-head" },
-        h("div", { className: "dia-title" }, titleEl),
+        h("button", { className: "dia-icon dia-new", title: "New chat", onclick: () => newChat() }, icon("new")),
         h("div", { className: "dia-head-right" },
-          btn("history", "Chat history", () => openHistory()),
-          btn("new", "New chat", () => newChat()),
-          btn("close", `Hide (${SHORTCUT}) — your chat is kept for this tab`, () => dismiss())));
+          h("button", { className: "dia-icon dia-layout", title: "Chat history, Skills and layout", onclick: (e) => { e.stopPropagation(); openHeaderMenu(); } }, icon("sidebar"), icon("chevs")),
+          h("button", { className: "dia-icon dia-close", title: `Hide (${SHORTCUT}), your chat is kept for this tab`, onclick: () => dismiss() }, icon("close"))));
       logEl = h("div", { className: "dia-log" });
+      cardsEl = h("div", { className: "dia-cards" });
       pillsEl = h("div", { className: "dia-pills" });
-      input = h("textarea", { className: "dia-input", rows: 1, placeholder: "Ask about this page…" });
+      input = h("textarea", { className: "dia-input", rows: 1, placeholder: "Ask a question about this page..." });
       input.addEventListener("input", () => { autosize(); updatePop(); updateSend(); });
       input.addEventListener("focus", () => { wantFocus = false; });
       input.addEventListener("blur", () => setTimeout(() => { if (pop && pop.trigger !== "plus") closePop(); }, 150));
@@ -2828,10 +2914,12 @@
       sendBtn = h("button", { className: "dia-send", onclick: () => (busy && !hasContent() ? stop() : submit()) });
       sendBtn.addEventListener("mousedown", (e) => e.preventDefault()); // keep typing focus in the box after sending
       const addBtn = h("button", { className: "dia-icon dia-add", title: "Attach files, add tabs, Skills", onclick: (e) => { e.stopPropagation(); plusMenu(); } }, icon("plus"));
-      addBtn.addEventListener("mousedown", (e) => e.preventDefault());
-      webBtn = h("button", { className: "dia-icon dia-add dia-web", onclick: (e) => { e.stopPropagation(); setWeb(!webOn); } }, icon("globe"));
-      webBtn.addEventListener("mousedown", (e) => e.preventDefault());
-      composerEl = h("div", { className: "dia-composer" }, pillsEl, input, h("div", { className: "dia-row" }, h("div", { className: "dia-row-left" }, addBtn, webBtn), sendBtn));
+      tabPillEl = h("button", { className: "dia-tabpill", hidden: true, onclick: () => { if (started) return; usePage = !usePage; renderPills(); } });
+      webPillEl = h("button", { className: "dia-chip dia-web", hidden: true, title: "Web search is on for this chat. Click to turn off.", onclick: () => setWeb(false) }, icon("globe"), "Web");
+      const camBtn = h("button", { className: "dia-icon dia-cam", title: "Capture this page", onclick: () => addCapture() }, icon("camera"));
+      for (const b of [addBtn, tabPillEl, webPillEl, camBtn]) b.addEventListener("mousedown", (e) => e.preventDefault()); // keep typing focus in the box
+      composerEl = h("div", { className: "dia-composer" }, cardsEl, pillsEl, input,
+        h("div", { className: "dia-row" }, h("div", { className: "dia-row-left" }, addBtn, tabPillEl, webPillEl), h("div", { className: "dia-row-right" }, camBtn, sendBtn)));
       const dropzone = h("div", { className: "dia-dropzone" }, icon("drop"), h("span", { textContent: "Drop to add as context" }), h("small", { textContent: "Files, tabs or tab groups" }));
       panel = h("div", { className: "dia-panel", hidden: true }, head, logEl, h("div", { className: "dia-foot" }, composerEl), dropzone);
       // drag files, tabs (from the tab strip or Zen's sidebar) or whole tab groups onto the sidebar
@@ -2888,7 +2976,7 @@
       if (want && was) { autosize(); if (wantFocus) focusInput(); }
       updateDock();
     }
-    function dismiss() { userHidden = true; closePop(); sync(); }
+    function dismiss() { userHidden = true; closePop(); closeHMenu(); sync(); }
     function restore() { userHidden = false; sync(); focusInput(); }
 
     function close(immediate) {
@@ -2897,6 +2985,7 @@
       gen++;
       ctrl?.abort();
       closePop();
+      closeHMenu();
       try { mm?.removeMessageListener(SEL_MSG, onSelection); } catch {}
       sessions.delete(src);
       panel?.remove();
