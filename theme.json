@@ -1,7 +1,7 @@
 {
   "id": "dia-sidebar",
   "name": "Dia Sidebar",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "A Dia-style AI chat sidebar for Zen using Apple Intelligence via AFM Server. Includes drag-and-drop context, a full-size chat menu, history, Skills, web search and YouTube key moments. Press ⌘E/Ctrl+E or use the chat button in the URL bar.",
   "author": "you",
   "homepage": "https://github.com/YOUR_USERNAME/dia-sidebar",

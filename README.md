@@ -38,7 +38,7 @@ The current page is attached automatically as the pill in the bottom row (click 
 - **Stop & Resume**, **Regenerate**, **Copy**, **Edit** your messages or the model's answers. Type while an
   answer is streaming and your message is queued (*Edit* it, or *Send now* to interrupt).
 - **Web search**: search when you ask, and cite what it found (see below).
-- **History** and **Skills** are in a full-size sheet from the header menu, which also moves the sidebar to the other side. History keeps past chats with search, restore and delete. Stored in your profile folder as
+- The **header menu** (layout button, top right) is a small dropdown with Chat history, Skills and *Move sidebar to the other side*. History and Skills open as full-size, scrollable sheets. History keeps past chats with search, restore and delete. Stored in your profile folder as
   `dia-sidebar-chats.json` (it includes the page text each chat was about). Turn it off in settings.
 - **YouTube**: reads the transcript (works regardless of interface language) and summarizes automatically on
   videos. *Key moments* come with clickable **[mm:ss]** timestamps that seek the player.
@@ -102,7 +102,7 @@ reinstall from a repo (above), or save this script over the old one under its or
    icons) and gets a subtle highlight while the sidebar is open. No icon at all means the script isn't running: check
    the two Sine steps above.
 2. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see
-   `[dia-sidebar] loaded v2.0.2`. A wrong script filename shows up as `[Sine]: Failed to load script`. If
+   `[dia-sidebar] loaded v2.0.3`. A wrong script filename shows up as `[Sine]: Failed to load script`. If
    clicking the icon does nothing, look for `[dia-sidebar] couldn't open the sidebar` and the error under it.
 
 ## Notes

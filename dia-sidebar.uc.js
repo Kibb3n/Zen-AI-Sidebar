@@ -14,7 +14,7 @@
   const SEL_MSG = "dia-sidebar:selection";
   const MAX_CHARS = 24000;
   const MAX_REFS = 12;
-  const VERSION = "2.0.2";
+  const VERSION = "2.0.3";
   const DEFAULT_PROMPT = "Summarize this page into concise bullet points.";
   const SYSTEM =
     "You are an AI assistant living in a sidebar next to the web page the user is viewing. " +
@@ -121,7 +121,10 @@
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   &[data-accent="neutral"] { --tint: light-dark(#5b6b86, #b8c4d9); --panel: light-dark(#f4f4f5, #1a1a1c); }
   /* a real sidebar: an in-flow flex item next to the tab box, styled like Zen's own page card */
-  position: relative; flex: 0 0 var(--dia-w, 400px); width: var(--dia-w, 400px); min-width: 0; align-self: stretch;
+  /* The dock's height comes only from its row (align-self: stretch), never from its content. Without "contain: size" the
+     chat's content height leaks into Zen's #zen-tabbox-wrapper (min-height: auto), the dock grows taller than the window,
+     the composer is pushed off-screen and neither the chat nor the History/Skills lists can scroll. */
+  position: relative; flex: 0 0 var(--dia-w, 400px); width: var(--dia-w, 400px); min-width: 0; min-height: 0; max-height: 100%; align-self: stretch; contain: size;
   margin-inline-start: var(--zen-element-separation, 8px);
   box-sizing: border-box; display: flex; flex-direction: column;
   color: var(--fg); background: var(--panel); background-attachment: fixed;
@@ -142,8 +145,8 @@
   .dia-grip::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; margin-left: -1px; border-radius: 3px; background: var(--accent); opacity: 0; transition: opacity 0.15s; }
   .dia-grip:hover::after, &.dia-resizing .dia-grip::after { opacity: 0.5; }
 
-  .dia-panels { flex: 1; min-height: 0; display: flex; flex-direction: column; border-radius: inherit; overflow: hidden; position: relative; }
-  .dia-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+  .dia-panels { position: absolute; inset: 0; display: flex; flex-direction: column; border-radius: inherit; overflow: hidden; }
+  .dia-panel { flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column; position: relative; }
   .dia-panel[hidden] { display: none; }
   button { font: inherit; color: inherit; }
   .dia-svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; flex: none; }
@@ -161,7 +164,8 @@
   .dia-head .dia-layout .dia-svg:last-child { width: 13px; height: 13px; }
 
   /* conversation */
-  .dia-log { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--soft2) transparent; display: flex; flex-direction: column; gap: 22px; padding: 10px 18px 18px; }
+  .dia-log { flex: 1 1 0%; min-height: 0; overflow-x: hidden; overscroll-behavior-y: contain; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--soft2) transparent; display: flex; flex-direction: column; gap: 22px; padding: 10px 18px 18px; }
+  .dia-log > * { flex-shrink: 0; } /* messages keep their height; the log scrolls instead of squashing them */
   .dia-msg { animation: dia-in 0.38s var(--ease) both; }
   .dia-answer { overflow-wrap: anywhere; }
   .dia-answer p, .dia-ubub p { margin: 0 0 10px; }
@@ -243,7 +247,7 @@
   .dia-foot { flex: none; padding: 6px 14px 14px; }
   .dia-composer { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 12px 12px 10px 14px; border: 1px solid var(--line); border-radius: 26px; background: var(--glass); backdrop-filter: blur(14px); transition: border-color 0.2s; }
   .dia-composer:focus-within { border-color: color-mix(in srgb, var(--fg) 28%, transparent); }
-  .dia-cards { display: flex; flex-wrap: wrap; gap: 8px; max-height: 196px; overflow-y: auto; scrollbar-width: thin; }
+  .dia-cards { display: flex; flex-wrap: wrap; gap: 8px; max-height: min(196px, 24vh); overflow-y: auto; scrollbar-width: thin; }
   .dia-cards:empty { display: none; }
   .dia-card { position: relative; display: flex; align-items: center; gap: 12px; max-width: 100%; box-sizing: border-box; padding: 8px 36px 8px 8px; border-radius: 16px; background: var(--glass); animation: dia-in 0.25s var(--ease) both; }
   .dia-card-thumb { width: 38px; height: 48px; flex: none; border-radius: 9px; overflow: hidden; display: grid; place-items: center; background: var(--soft2); color: var(--mute); }
@@ -315,14 +319,14 @@
 
   /* drop zone: files and tabs dragged onto the sidebar */
   .dia-dropzone { position: absolute; inset: 8px; z-index: 9; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; pointer-events: none;
-    border: 1.5px dashed color-mix(in srgb, var(--accent) 60%, transparent); border-radius: 18px; background: color-mix(in srgb, var(--bg) 90%, transparent);
+    border: 1.5px dashed color-mix(in srgb, var(--accent) 60%, transparent); border-radius: 18px; background: color-mix(in srgb, var(--pop) 92%, transparent);
     backdrop-filter: blur(3px); color: var(--accent); font-weight: 550; opacity: 0; transform: scale(0.985); transition: opacity 0.18s, transform 0.25s var(--ease); }
   .dia-dropzone .dia-svg { width: 26px; height: 26px; }
   .dia-dropzone small { color: var(--mute); font-weight: 400; font-size: 12px; }
   .dia-drop .dia-dropzone { opacity: 1; transform: none; }
 
   /* popup menu (slash skills, @ mentions, + menu) */
-  .dia-menu { position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; z-index: 10; max-height: 300px; overflow-y: auto; scrollbar-width: thin; padding: 5px; background: var(--pop); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 14px 38px rgba(0, 0, 0, 0.28); animation: dia-in 0.2s var(--ease) both; }
+  .dia-menu { position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; z-index: 10; max-height: min(300px, 45vh); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 5px; background: var(--pop); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 14px 38px rgba(0, 0, 0, 0.28); animation: dia-in 0.2s var(--ease) both; }
   .dia-menu-sep { font-size: 11px; color: var(--mute); padding: 8px 10px 3px; letter-spacing: 0.02em; }
   .dia-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; text-align: start; appearance: none; border: 0; cursor: pointer; background: transparent; padding: 7px 10px; border-radius: 9px; font-size: 13px; }
   .dia-menu-item:hover, .dia-menu-item.dia-active { background: var(--soft); }
@@ -330,18 +334,21 @@
   .dia-menu-item img.dia-menu-ico { width: 16px; height: 16px; border-radius: 4px; flex: none; }
   .dia-menu-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dia-menu-sub { color: var(--mute); font-size: 11.5px; white-space: nowrap; }
-  .dia-menu-choice { appearance: none; flex: 0 0 auto; width: 100%; display: flex; align-items: center; gap: 12px; box-sizing: border-box; padding: 14px 12px; text-align: start; border: 0; border-bottom: 1px solid var(--line); border-radius: 12px; color: inherit; background: transparent; cursor: pointer; font: inherit; }
+  .dia-hmenu { position: absolute; top: 52px; right: 12px; z-index: 11; width: min(290px, calc(100% - 24px)); box-sizing: border-box; padding: 5px; background: var(--pop); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 14px 38px rgba(0, 0, 0, 0.28); animation: dia-in 0.18s var(--ease) both; }
+  .dia-menu-choice { appearance: none; flex: 0 0 auto; width: 100%; display: flex; align-items: center; gap: 12px; box-sizing: border-box; padding: 9px 10px; text-align: start; border: 0; border-radius: 10px; color: inherit; background: transparent; cursor: pointer; font: inherit; }
   .dia-menu-choice:hover { background: var(--soft); }
   .dia-menu-choice > .dia-svg { color: var(--mute); }
   .dia-menu-choice-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .dia-menu-choice-title { font-weight: 600; }
-  .dia-menu-choice-sub { color: var(--mute); font-size: 12px; }
+  .dia-menu-choice-sub { color: var(--mute); font-size: 12px; line-height: 1.35; }
+  .dia-head .dia-layout.dia-open { background: var(--soft); color: var(--fg); }
 
   /* history / skills sheet */
   .dia-sheet { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--panel); background-attachment: fixed; border-radius: inherit; animation: dia-in 0.25s var(--ease) both; }
   .dia-sheet-head { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; padding: 12px 10px 6px 18px; font-weight: 600; font-size: 13px; }
   .dia-sheet-head span { flex: 1; }
-  .dia-sheet-body { flex: 1 1 0%; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: auto; padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+  .dia-panel.dia-sheeted > :not(.dia-sheet):not(.dia-dropzone):not(.dia-hmenu) { visibility: hidden; } /* never let the chat show through a sheet */
+  .dia-sheet-body { flex: 1 1 0%; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 2px; }
   .dia-search { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; margin: 2px 12px 8px; padding: 7px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); color: var(--mute); }
   .dia-search input { flex: 1; min-width: 0; border: 0 !important; outline: 0 !important; background: transparent !important; color: var(--fg); font: inherit; padding: 0 !important; }
   .dia-row-item { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 10px; border-radius: 12px; cursor: pointer; }
@@ -1820,7 +1827,7 @@
 
   // ---------- per-tab session ----------
   function makeSession(src) {
-    let panel, logEl, input, sendBtn, pillsEl, cardsEl, tabPillEl, webPillEl, composerEl, titleEl, sheetEl = null;
+    let panel, logEl, input, sendBtn, pillsEl, cardsEl, tabPillEl, webPillEl, composerEl, titleEl, sheetEl = null, hmenuEl = null;
     let started = false, busy = false, generating = false, stopped = false, closed = false, userHidden = false, wantFocus = false;
     let page = null, convo = [], refs = [], ctrl = null, gen = 0, refSeq = 0, chatId = null, chatTitle = "";
     let usePage = true, skill = null, formats = [], manage = false, webOn = false; // webOn: the globe button
@@ -2771,12 +2778,13 @@
     }
 
     // ----- sheets (history, skills) laid over the conversation -----
-    function closeSheet() { sheetEl?.remove(); sheetEl = null; }
+    function closeSheet() { sheetEl?.remove(); sheetEl = null; panel?.classList.remove("dia-sheeted"); }
     function openSheet(title, ...body) {
-      closeSheet();
+      closeSheet(); closeHMenu();
       sheetEl = h("div", { className: "dia-sheet" },
         h("div", { className: "dia-sheet-head" }, h("span", { textContent: title }), h("button", { className: "dia-icon", title: "Close", onclick: closeSheet }, icon("close"))),
         ...body);
+      panel.classList.add("dia-sheeted");
       panel.append(sheetEl);
       return sheetEl;
     }
@@ -2797,6 +2805,7 @@
         if (chats.length && !t) listEl.append(h("button", { className: "dia-mini", textContent: "Clear all history", onclick: () => { chats = []; store.clear(); paint(); } }));
       };
       q.addEventListener("input", paint);
+      q.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); closeSheet(); focusInput(); } });
       paint();
       q.focus();
     }
@@ -2856,26 +2865,31 @@
     // Dia shows nothing in an empty chat: no greeting, no suggestions. Skills live behind / and the header menu.
     function renderEmpty() {}
 
-    // The header button opens a full-size sheet so history and its scrolling list have room.
+    // The header button opens a small dropdown. History and Skills then open as full-size sheets (they have lists to scroll).
+    const onHMenuDown = (e) => { if (hmenuEl && !hmenuEl.contains(e.target) && !e.target.closest?.(".dia-layout")) closeHMenu(); };
     function closeHMenu() {
-      if (sheetEl?.dataset.sheetKind === "header-menu") closeSheet();
+      if (!hmenuEl) return;
+      hmenuEl.remove(); hmenuEl = null;
+      panel?.querySelector(".dia-layout")?.classList.remove("dia-open");
+      document.removeEventListener("pointerdown", onHMenuDown, true);
     }
     function openHeaderMenu() {
-      if (sheetEl?.dataset.sheetKind === "header-menu") { closeSheet(); return; }
-      closePop();
-      const choice = (ico, label, detail, fn) => h("button", { className: "dia-menu-choice", onclick: () => { closeSheet(); fn(); } },
+      if (hmenuEl) { closeHMenu(); return; }
+      closePop(); closeSheet();
+      const choice = (ico, label, detail, fn) => h("button", { className: "dia-menu-choice", onclick: () => { closeHMenu(); fn(); } },
         icon(ico), h("span", { className: "dia-menu-choice-main" },
           h("span", { className: "dia-menu-choice-title", textContent: label }),
           h("span", { className: "dia-menu-choice-sub", textContent: detail })));
-      const body = h("div", { className: "dia-sheet-body" },
+      hmenuEl = h("div", { className: "dia-hmenu" },
         choice("history", "Chat history", "Search, reopen, or delete saved chats", () => openHistory()),
         choice("spark", "Skills", "Choose or edit saved prompts", () => openSkills()),
         choice("sidebar", dockSide() === "left" ? "Move sidebar to the right" : "Move sidebar to the left", "Change which side of the page the chat uses", () => {
           setPref("side", dockSide() === "left" ? "right" : "left");
           updateDock();
         }));
-      const sheet = openSheet("Chat history, Skills and layout", body);
-      sheet.dataset.sheetKind = "header-menu";
+      panel.append(hmenuEl);
+      panel.querySelector(".dia-layout")?.classList.add("dia-open");
+      setTimeout(() => { if (hmenuEl) document.addEventListener("pointerdown", onHMenuDown, true); }, 0);
     }
 
     // keepSplit: re-attach the other split pane(s) as locked pills. open() passes false because it
@@ -2934,7 +2948,7 @@
           if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); e.stopPropagation(); pickPop(pop.sel[pop.idx]); return; }
           if (e.key === "Escape") { e.preventDefault(); closePop(); return; }
         }
-        if (e.key === "Escape" && sheetEl) { closeSheet(); return; }
+        if (e.key === "Escape" && (sheetEl || hmenuEl)) { e.preventDefault(); closeSheet(); closeHMenu(); return; }
         if (e.key === "Enter" && !e.isComposing) {
           // default: Enter sends, Shift+Enter adds a line. With "Enter sends" off it is ⌘/Ctrl+Enter that sends.
           const send = bool("entersends", true) ? !e.shiftKey : e.metaKey || e.ctrlKey;
