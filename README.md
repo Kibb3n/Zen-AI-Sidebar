@@ -1,9 +1,11 @@
 # Dia Sidebar (Sine mod for Zen)
 
 A Dia-style AI chat sidebar for Zen, loaded as a userChrome.js mod via Sine. It is a **real sidebar**: it
-sits next to the page inside Zen's own layout, so the page gets narrower (nothing floats over it).
+sits next to the page inside Zen's own layout, so the page gets narrower (nothing floats over it). It always sits on the
+**opposite side from your tab sidebar** and follows it if you move the tabs to the other side. It stays visible in normal
+fullscreen (F11 / macOS) and only hides when a page itself goes fullscreen, such as a video.
 
-**It looks like Dia's sidebar**: a bare header (new chat on the left; a layout menu and close on the right), a blank
+**It looks like Dia's sidebar**: a bare header (new chat and the **model picker** on the left; a menu and close on the right), a blank
 empty chat, and one big rounded composer holding your context cards, the box, and a bottom row with **+**, the
 current tab as a pill, a **camera** (capture the page) and a round send button. It sits on your **Zen space's own
 background colour** and uses Zen's text colour, page-card radius and shadow, so it follows each space and Zen's
@@ -38,12 +40,16 @@ The current page is attached automatically as the pill in the bottom row (click 
 - **Stop & Resume**, **Regenerate**, **Copy**, **Edit** your messages or the model's answers. Type while an
   answer is streaming and your message is queued (*Edit* it, or *Send now* to interrupt).
 - **Web search**: search when you ask, and cite what it found (see below).
-- The **header menu** (layout button, top right) is a small dropdown with Chat history, Skills and *Move sidebar to the other side*. History and Skills open as full-size, scrollable sheets. History keeps past chats with search, restore and delete. Stored in your profile folder as
+- The **header menu** (top right) is a small dropdown with Chat history and Skills. Both open as full-size, scrollable sheets.
+- **Models**: the pill at the top left shows the model in use; click it to switch. *Add or manage models…* opens a sheet where you
+  add any number of OpenAI-compatible models (Ollama, LM Studio, OpenRouter, OpenAI…) with a name, server address, model ID and
+  optional key. **Find models** asks the server what it offers. Tick *Small context window* for on-device or local models limited
+  to about 4K tokens, and *Can read images* for vision models. The choice applies to your next message, in every chat and window. History keeps past chats with search, restore and delete. Stored in your profile folder as
   `dia-sidebar-chats.json` (it includes the page text each chat was about). Turn it off in settings.
 - **YouTube**: reads the transcript (works regardless of interface language) and summarizes automatically on
   videos. *Key moments* come with clickable **[mm:ss]** timestamps that seek the player.
 - Markdown with tables, code blocks (Copy buttons), nested lists and favicon links.
-- Drag the sidebar's left edge to resize; double-click the edge to reset.
+- Drag the sidebar's inner edge to resize; double-click the edge to reset.
 - Opened over a **split view**, the whole split becomes one chat and every pane is attached.
 
 ## Web search
@@ -55,12 +61,15 @@ Fetched page text is not saved to history.
 
 ## AI backends (Sine → this mod → settings)
 
-This build uses **Apple Intelligence via AFM Server** with the fixed model `apple.local`. The default
+The built-in model is **Apple Intelligence via AFM Server** with the fixed model `apple.local`. The default
 address is `http://127.0.0.1:11435/v1`. Change it only if you configured AFM Server to use another port.
 Leave the API key blank unless key protection is enabled in AFM Server. Page and attachment text is
 condensed and capped, and only a short recent chat is sent, to leave room inside Apple's 4,096-token
 on-device context window for the answer. If the server cannot be reached, the chat shows the server
 error.
+
+Extra models you add are stored in `dia-sidebar-models.json` in your Firefox profile folder (API keys are plain text there).
+Text-only models never receive image attachments.
 
 ## Settings
 
@@ -70,11 +79,11 @@ Sine → this mod → settings. The AI backend and model are fixed to AFM Server
 - **Chat**: answer length (concise / balanced), automatic summaries, and whether Enter sends or adds a new line.
 - **Context**: attach the current page automatically, attach text selected on the page, YouTube timestamps.
 - **Web search**: only when asked or off. DuckDuckGo is used when you request a search.
-- **Appearance**: sidebar on the left or right, match your Zen space or use neutral colours, text size, and
+- **Appearance**: match your Zen space or use neutral colours, text size, and
   whether the URL bar button is shown. Drag the sidebar's edge to resize it (double-click the edge to reset).
 - **Privacy**: save chat history or not.
 
-Older AFM server address preferences still work as a fallback. Provider and model selections are no longer used.
+Older AFM server address preferences still work as a fallback.
 
 ## Not included
 
@@ -102,7 +111,7 @@ reinstall from a repo (above), or save this script over the old one under its or
    icons) and gets a subtle highlight while the sidebar is open. No icon at all means the script isn't running: check
    the two Sine steps above.
 2. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see
-   `[dia-sidebar] loaded v2.0.3`. A wrong script filename shows up as `[Sine]: Failed to load script`. If
+   `[dia-sidebar] loaded v2.1.0`. A wrong script filename shows up as `[Sine]: Failed to load script`. If
    clicking the icon does nothing, look for `[dia-sidebar] couldn't open the sidebar` and the error under it.
 
 ## Notes

@@ -1,7 +1,7 @@
 [
   {
     "type": "separator",
-    "label": "**Apple Intelligence**\n*Uses AFM Server with the fixed model apple.local.*"
+    "label": "**Apple Intelligence (built in)**\n*Uses AFM Server with the fixed model apple.local. To add other models and switch between them, use the model menu at the top of the sidebar.*"
   },
   {
     "property": "mod.dia-sidebar.server",
@@ -110,24 +110,7 @@
   },
   {
     "type": "separator",
-    "label": "**Appearance**\n*Drag the sidebar's edge to resize it. Double-click the edge to reset.*"
-  },
-  {
-    "property": "mod.dia-sidebar.side",
-    "label": "Sidebar side",
-    "type": "dropdown",
-    "defaultValue": "right",
-    "placeholder": false,
-    "options": [
-      {
-        "label": "Right",
-        "value": "right"
-      },
-      {
-        "label": "Left",
-        "value": "left"
-      }
-    ]
+    "label": "**Appearance**\n*The sidebar always sits opposite your tab sidebar. Drag its edge to resize it. Double-click the edge to reset.*"
   },
   {
     "property": "mod.dia-sidebar.accent",

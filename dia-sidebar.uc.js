@@ -14,7 +14,7 @@
   const SEL_MSG = "dia-sidebar:selection";
   const MAX_CHARS = 24000;
   const MAX_REFS = 12;
-  const VERSION = "2.0.3";
+  const VERSION = "2.1.0";
   const DEFAULT_PROMPT = "Summarize this page into concise bullet points.";
   const SYSTEM =
     "You are an AI assistant living in a sidebar next to the web page the user is viewing. " +
@@ -133,9 +133,10 @@
   box-shadow: var(--zen-big-shadow, 0 2px 10px rgba(0, 0, 0, 0.14));
   animation: dia-slide 0.32s var(--ease);
   &[hidden] { display: none; }
-  &[data-side="left"] { margin-inline-start: 0; margin-inline-end: var(--zen-element-separation, 8px); }
+  &[data-side="left"] { margin-inline-start: 0; margin-inline-end: var(--zen-element-separation, 8px); animation-name: dia-slide-l; }
   &.dia-float { position: fixed; top: 80px; right: 8px; bottom: 8px; margin: 0; z-index: 2147483000; flex: none; }
-  :root[inDOMFullscreen="true"] &, :root[inFullscreen] & { display: none; }
+  /* Stays visible in normal fullscreen (F11 / macOS). Hidden only when a page itself goes fullscreen (a video, say). */
+  :root[inDOMFullscreen="true"] & { display: none; }
   &.dia-resizing { user-select: none; }
   &.dia-resizing * { pointer-events: none; }
   &.dia-resizing .dia-grip { pointer-events: auto; }
@@ -154,7 +155,12 @@
 
   /* header, like Dia: new chat on the left; layout menu and close on the right. No title. */
   .dia-head { display: flex; align-items: center; justify-content: space-between; flex: none; padding: 14px 14px 6px 16px; }
-  .dia-head-right { display: flex; align-items: center; gap: 4px; }
+  .dia-head-left { display: flex; align-items: center; gap: 2px; min-width: 0; flex: 0 1 auto; }
+  .dia-head-right { display: flex; align-items: center; gap: 4px; flex: none; }
+  .dia-modelbtn { appearance: none; border: 0; background: transparent; color: var(--mute); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; height: 34px; min-width: 0; padding: 0 8px 0 10px; border-radius: 12px; font-size: 13px; transition: background-color 0.15s, color 0.15s; }
+  .dia-modelbtn:hover, .dia-modelbtn.dia-open { background: var(--soft); color: var(--fg); }
+  .dia-modelname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px; }
+  .dia-modelbtn .dia-svg { width: 13px; height: 13px; flex: none; }
   .dia-icon { appearance: none; background: transparent; border: 0; cursor: pointer; width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; color: var(--mute); transition: background-color 0.15s, color 0.15s, transform 0.15s var(--ease); }
   .dia-icon:hover { background: var(--soft); color: var(--fg); }
   .dia-icon:active { transform: scale(0.92); }
@@ -298,7 +304,7 @@
   .dia-chip { appearance: none; border: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 5px 11px 5px 9px; border-radius: 999px; font-size: 13px; color: inherit; background: color-mix(in srgb, var(--accent) 20%, transparent); }
   .dia-chip[hidden] { display: none; }
   .dia-chip .dia-svg { width: 14px; height: 14px; color: var(--accent); }
-  .dia-send { appearance: none; border: 0; cursor: pointer; flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--on-accent); transition: transform 0.15s var(--ease), opacity 0.15s; }
+  .dia-send { appearance: none; border: 0; cursor: pointer; flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 78%, white); color: var(--on-accent); transition: transform 0.15s var(--ease), opacity 0.15s; }
   .dia-send .dia-svg { width: 18px; height: 18px; stroke-width: 2; }
   .dia-send:not([disabled]):hover { transform: scale(1.07); }
   .dia-send:active { transform: scale(0.92); }
@@ -339,8 +345,12 @@
   .dia-menu-choice:hover { background: var(--soft); }
   .dia-menu-choice > .dia-svg { color: var(--mute); }
   .dia-menu-choice-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-  .dia-menu-choice-title { font-weight: 600; }
-  .dia-menu-choice-sub { color: var(--mute); font-size: 12px; line-height: 1.35; }
+  .dia-menu-choice-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dia-menu-choice.dia-active { background: var(--soft); }
+  .dia-ico-gap { width: 16px; height: 16px; flex: none; }
+  .dia-menu-rule { height: 1px; margin: 4px 6px; background: var(--line); }
+  .dia-hmenu.dia-mmenu { right: auto; left: 12px; width: min(330px, calc(100% - 24px)); max-height: calc(100% - 70px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+  .dia-menu-choice-sub { color: var(--mute); font-size: 12px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dia-head .dia-layout.dia-open { background: var(--soft); color: var(--fg); }
 
   /* history / skills sheet */
@@ -364,10 +374,17 @@
   .dia-form input, .dia-form textarea { font: inherit; color: inherit; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); outline: 0; resize: vertical; width: 100%; box-sizing: border-box; }
   .dia-form input:focus, .dia-form textarea:focus { border-color: color-mix(in srgb, var(--fg) 30%, transparent); }
   .dia-form textarea { min-height: 100px; }
+  .dia-form input[type="checkbox"] { width: 16px; height: 16px; padding: 0; margin: 0; flex: none; accent-color: var(--accent); }
+  .dia-form label.dia-check { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; color: var(--fg); line-height: 1.4; }
+  .dia-form label.dia-check input { margin-top: 1px; }
+  .dia-found { display: flex; flex-wrap: wrap; gap: 6px; }
+  .dia-found:empty, .dia-form .dia-note:empty { display: none; }
+  .dia-found .dia-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
 }
 
 @keyframes dia-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes dia-slide { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+@keyframes dia-slide-l { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: none; } }
 @keyframes dia-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
 @keyframes dia-blink { 50% { opacity: 0; } }
 @keyframes dia-bounce { 0%, 75%, 100% { opacity: 0.3; transform: translateY(0); } 38% { opacity: 0.95; transform: translateY(-4px); } }
@@ -415,26 +432,32 @@
   const setPref = (k, v) => { try { Services.prefs.setStringPref(PREF + k, String(v)); } catch {} };
   // checkboxes in Sine's settings are real booleans
   const bool = (k, d) => { try { return Services.prefs.getBoolPref(PREF + k); } catch { return d; } };
-  // This build is tuned for AFM Server's on-device Apple model.
-  const provider = () => "apple";
-  const apiKey = () => pref("apikey", "").trim();
-  // one "Server address" setting (older versions had a separate one per provider; those still work)
-  const server = () => (pref("server", "") || (provider() === "apple" ? pref("applebase", "") : pref("baseurl", ""))).trim();
-  const baseUrl = () =>
-    (server() || (provider() === "apple" ? "http://127.0.0.1:11435/v1" : "https://api.openai.com/v1"))
-      .trim()
-      .replace(/\/+$/, "")
-      .replace(/^(https?:\/\/[^/]+)$/, provider() === "apple" ? "$1/v1" : "$1");
-  const model = () => "apple.local";
+  // ---------- models ----------
+  // Apple Intelligence (AFM Server) is built in and uses the address/key in Sine's settings. Any number of other
+  // OpenAI-compatible models (Ollama, LM Studio, OpenRouter, OpenAI…) can be added from the model menu; they live in
+  // the profile folder and you switch between them from the sidebar header.
+  const DEFAULT_BASE = "http://127.0.0.1:11435/v1";
+  const normBase = (u) => String(u || "").trim().replace(/\/+$/, "").replace(/^(https?:\/\/[^/]+)$/, "$1/v1");
+  const builtinModel = () => ({
+    id: "apple", name: "Apple Intelligence", model: "apple.local", builtin: true, small: true, vision: false,
+    base: normBase(pref("server", "") || pref("applebase", "") || DEFAULT_BASE),
+    key: pref("apikey", "").trim(),
+  });
+  const allModels = () => [builtinModel(), ...store.models().map((m) => ({ ...m, base: normBase(m.base) }))];
+  const activeModel = () => { const id = pref("activemodel", "apple"); return allModels().find((m) => m.id === id) || builtinModel(); };
+  // "apple" = the small-context prompt layout (one flattened turn, tight caps); "openai" = normal multi-turn chat
+  const provider = () => (activeModel().small ? "apple" : "openai");
+  const apiKey = () => (activeModel().key || "").trim();
+  const baseUrl = () => activeModel().base;
+  const model = () => activeModel().model;
   const isNative = () => provider() === "anthropic" || provider() === "gemini"; // has its own web-search tool and reads PDFs natively
   const rawPdf = () => isNative(); // models that read PDF bytes directly
-  const llmReady = () =>
-    isNative()
-      ? !!apiKey()
-      : provider() === "apple" || !!apiKey() || /localhost|127\.0\.0\.1/.test(baseUrl());
-  const isLocal = () => provider() === "apple" || /localhost|127\.0\.0\.1/.test(baseUrl());
+  // servers on this machine or your network: no Origin header (some local servers reject it) and no key needed
+  const LOCAL_RE = /^https?:\/\/(localhost(?=[:/]|$)|127\.|0\.0\.0\.0|\[::1\]|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|[^/:]+\.local(?=[:/]|$))/i;
+  const isLocal = () => provider() === "apple" || LOCAL_RE.test(baseUrl());
+  const llmReady = () => isNative() ? !!apiKey() : provider() === "apple" || !!apiKey() || isLocal();
   // Keep page text small for Apple's fixed 4,096-token on-device context window.
-  const chunkSize = () => 4200; // reserve room inside Apple's 4,096-token on-device context for the prompt and answer
+  const chunkSize = () => (provider() === "apple" ? 4200 : 16000); // small models: leave room inside a 4,096-token window for the prompt and answer
   const thinkBudget = () => (isNative() ? parseInt(pref("thinking", "0"), 10) || 0 : 0);
   // "auto" (default, like Dia): the assistant searches the web by itself whenever the question needs it.
   // "manual": only when you turn the globe on / use @Web. "off": never.
@@ -464,7 +487,8 @@
     const extra = pref("instructions", "").trim();
     return s + (extra ? "\n\nThe user's standing instructions for how you respond:\n" + extra : "");
   };
-  const canSeeFiles = () => provider() !== "apple"; // the on-device model is text-only
+  const canSeeFiles = () => !!activeModel().vision; // only models marked "Can read images" get image attachments
+  const textOnlyNote = () => `${activeModel().name} is text-only; image contents won't be analyzed.`;
 
   // ---------- DOM helpers ----------
   const h = (tag, props = {}, ...kids) => {
@@ -502,12 +526,17 @@
   // ---------- profile storage: chat history + your own Skills (plain JSON next to prefs.js) ----------
   const store = (() => {
     const file = (n) => PathUtils.join(PathUtils.profileDir, n);
-    const FC = "dia-sidebar-chats.json", FS = "dia-sidebar-skills.json";
+    const FC = "dia-sidebar-chats.json", FS = "dia-sidebar-skills.json", FM = "dia-sidebar-models.json";
     const read = async (n, d) => { try { return (await IOUtils.readJSON(file(n))) || d; } catch { return d; } };
-    let skills = [];
+    let skills = [], models = [];
     return {
       skills: () => skills,
-      async load() { skills = await read(FS, []); },
+      models: () => models,
+      async load() { skills = await read(FS, []); const m = await read(FM, []); models = Array.isArray(m) ? m.filter((x) => x && x.id && x.base && x.model) : []; },
+      async saveModels(list) {
+        models = list;
+        try { await IOUtils.writeJSON(file(FM), list); } catch (e) { console.warn("[dia-sidebar] save models", e); }
+      },
       chats: () => read(FC, []),
       async upsert(c) {
         // re-read first so two windows saving at once don't clobber each other
@@ -1098,7 +1127,7 @@
   }
 
   async function* chunks(url, headers, body, signal) {
-    if (provider() === "apple") {
+    if (isLocal()) {
       try {
         yield* channelChunks(url, headers, body, signal);
         return;
@@ -1108,6 +1137,42 @@
       }
     }
     yield* fetchChunks(url, headers, body, signal);
+  }
+
+  // GET (used to list a server's models). Local servers go through a raw channel, like the chat requests.
+  async function httpGet(url, headers = {}) {
+    if (!LOCAL_RE.test(url)) {
+      const res = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
+      const txt = await res.text();
+      if (!res.ok) throw new Error(httpError(res.status, txt));
+      return txt;
+    }
+    const { NetUtil } = ChromeUtils.importESModule("resource://gre/modules/NetUtil.sys.mjs");
+    return new Promise((resolve, reject) => {
+      let ch, full = "", status = 0;
+      try {
+        ch = NetUtil.newChannel({ uri: url, loadUsingSystemPrincipal: true }).QueryInterface(Ci.nsIHttpChannel);
+        for (const [k, v] of Object.entries(headers)) ch.setRequestHeader(k, v, false);
+      } catch (e) { reject(e); return; }
+      const timer = setTimeout(() => { try { ch.cancel(Components.results.NS_BINDING_ABORTED); } catch {} reject(new Error("timed out")); }, 8000);
+      const dec = new TextDecoder();
+      try {
+        ch.asyncOpen({
+          QueryInterface: ChromeUtils.generateQI(["nsIStreamListener", "nsIRequestObserver"]),
+          onStartRequest() { try { status = ch.responseStatus; } catch {} },
+          onDataAvailable(_r, stream, _o, count) {
+            const bin = NetUtil.readInputStreamToString(stream, count);
+            full += dec.decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)), { stream: true });
+          },
+          onStopRequest(_r, code) {
+            clearTimeout(timer);
+            if (status >= 400) reject(new Error(httpError(status, full)));
+            else if (!Components.isSuccessCode(code) && !status) reject(new TypeError("network error"));
+            else resolve(full);
+          },
+        });
+      } catch (e) { clearTimeout(timer); reject(e); }
+    });
   }
 
   async function* sseEvents(chunkIter) {
@@ -1654,7 +1719,13 @@
   const hostW = () => document.getElementById("tabbrowser-tabbox")?.parentNode?.getBoundingClientRect().width || window.innerWidth;
   const clampW = (w) => Math.max(320, Math.min(w, 800, Math.floor(hostW() * 0.6)));
   const dockWidth = () => dragW ?? clampW(parseInt(pref("width", "400"), 10) || 400);
-  const dockSide = () => (pref("side", "right") === "left" ? "left" : "right");
+  // The chat always sits on the opposite side of Zen's tab sidebar (no setting). With horizontal tabs there is no
+  // sidebar, so it goes on the right.
+  const tabsOnRight = () => {
+    try { return Services.prefs.getBoolPref("zen.tabs.vertical", true) && Services.prefs.getBoolPref("zen.tabs.vertical.right-side", false); }
+    catch { return document.documentElement.hasAttribute("zen-right-side"); }
+  };
+  const dockSide = () => (tabsOnRight() ? "left" : "right");
 
   function mountDock() {
     const tabbox = document.getElementById("tabbrowser-tabbox");
@@ -1827,7 +1898,7 @@
 
   // ---------- per-tab session ----------
   function makeSession(src) {
-    let panel, logEl, input, sendBtn, pillsEl, cardsEl, tabPillEl, webPillEl, composerEl, titleEl, sheetEl = null, hmenuEl = null;
+    let panel, logEl, input, sendBtn, pillsEl, cardsEl, tabPillEl, webPillEl, composerEl, titleEl, modelBtnEl, sheetEl = null, hmenuEl = null, hmenuKind = "";
     let started = false, busy = false, generating = false, stopped = false, closed = false, userHidden = false, wantFocus = false;
     let page = null, convo = [], refs = [], ctrl = null, gen = 0, refSeq = 0, chatId = null, chatTitle = "";
     let usePage = true, skill = null, formats = [], manage = false, webOn = false; // webOn: the globe button
@@ -1983,7 +2054,7 @@
     // the camera button: attach a screenshot of the page (for models that can see images)
     async function addCapture() {
       if (!srcUrl() && !src.linkedBrowser) return;
-      if (!canSeeFiles()) flashNote("AFM Server's apple.local model is text-only; image contents won't be analyzed.");
+      if (!canSeeFiles()) flashNote(textOnlyNote());
       else flashNote("Capturing…", true);
       const cap = await captureBrowser(src.linkedBrowser);
       if (!cap) { flashNote("Couldn't capture this page."); return; }
@@ -2041,7 +2112,7 @@
       if (/^image\/(png|jpe?g|gif|webp)$/.test(f.type)) {
         if (f.size > 8e6) { flashNote("That image is over 8 MB."); return; }
         const dataUrl = await readDataUrl(f);
-        if (!canSeeFiles()) flashNote("AFM Server's apple.local model is text-only; image contents won't be analyzed.");
+        if (!canSeeFiles()) flashNote(textOnlyNote());
         addContext({ kind: "image", label: name, mime: f.type, b64: dataUrl.split(",")[1], dataUrl, text: "[image: " + name + "]" });
       } else if (f.type === "application/pdf" || /\.pdf$/i.test(name)) {
         if (f.size > 25e6) { flashNote("That PDF is over 25 MB."); return; }
@@ -2242,7 +2313,7 @@
       : r.kind === "clip" ? "TEXT THE USER PASTED IN"
       : r.kind === "file" || r.kind === "pdf" ? `FILE THE USER ATTACHED (${r.label})`
       : "TEXT THE USER SELECTED ON THE PAGE";
-    const sendsRaw = (r) => r.kind === "image" || (r.kind === "pdf" && rawPdf()); // sent as image/document blocks
+    const sendsRaw = (r) => (r.kind === "image" && canSeeFiles()) || (r.kind === "pdf" && rawPdf()); // sent as image/document blocks
     // the text a user turn carries: the request, @format hints, attached tabs/files/selections, tab list
     function userText(m, withTabs) {
       const apple = provider() === "apple";
@@ -2250,7 +2321,7 @@
       const fm = (m.formats || []).map((id) => FORMATS.find((f) => f.id === id)?.prompt).filter(Boolean);
       if (fm.length) t += "\n\n" + fm.join(" ");
       for (const r of m.refs || []) {
-        if (sendsRaw(r)) continue;
+        if (r.kind === "image" || sendsRaw(r)) continue;
         const cap = r.kind === "file" ? (apple ? 3000 : 20000) : apple ? 2000 : 8000;
         t += `\n\n=== ${refHead(r)} ===\n${(r.text || "").slice(0, cap)}`;
       }
@@ -2532,7 +2603,7 @@
           dropDots();
           acc = extractive(page?.text || "") || "Couldn't find enough text on this page to summarize.";
           renderMd(answerEl, acc, seek);
-          answerEl.append(h("div", { className: "dia-note", textContent: "Offline summary. Add an API key (or a local model) in the mod settings for AI answers." }));
+          answerEl.append(h("div", { className: "dia-note", textContent: "Offline summary. This model needs an API key: open the model menu at the top of the sidebar and edit it." }));
         } else {
           const lastU = [...convo].reverse().find((m) => m.role === "user");
           const heur = webMode() === "auto" && !lastU?.fromSkill && needsWeb(lastU?.label || lastU?.content || "");
@@ -2593,7 +2664,7 @@
         } else {
           failed = true;
           const unreachable = e instanceof TypeError;
-          block.append(h("p", { className: "dia-error", textContent: unreachable ? `Couldn't reach the AI server at ${provider() === "anthropic" ? "api.anthropic.com" : baseUrl()}. Is it running?` : `Couldn't answer: ${e.message}` }));
+          block.append(h("p", { className: "dia-error", textContent: unreachable ? `Couldn't reach ${activeModel().name} at ${baseUrl()}. Is it running?` : `Couldn't answer: ${e.message}` }));
           const lastU = [...convo].reverse().find((m) => m.role === "user");
           const errRow = h("div", { className: "dia-actions" },
             h("button", { className: "dia-mini", textContent: "Retry", onclick: () => { if (busy) return; block.remove(); generate(); } }));
@@ -2835,7 +2906,7 @@
         const draft = h("button", { className: "dia-btn", textContent: "✦ Write it for me", title: "Describe what you want in a sentence, then let the model write the skill", onclick: async () => {
           const d = prompt.value.trim() || name.value.trim();
           if (!d) { prompt.focus(); return; }
-          if (!llmReady()) { prompt.placeholder = "Start AFM Server, then try again."; return; }
+          if (!llmReady()) { prompt.placeholder = "Check that the AI server is running, then try again."; return; }
           draft.disabled = true; draft.textContent = "Writing…";
           try {
             const out = await askOnce("You turn a user's one-line idea into a reusable AI skill for a browser sidebar that can see the current page. Reply with ONLY JSON: {\"name\": \"2-3 word title\", \"prompt\": \"clear instructions for the assistant, second person, under 80 words\"}.", d);
@@ -2865,31 +2936,123 @@
     // Dia shows nothing in an empty chat: no greeting, no suggestions. Skills live behind / and the header menu.
     function renderEmpty() {}
 
-    // The header button opens a small dropdown. History and Skills then open as full-size sheets (they have lists to scroll).
-    const onHMenuDown = (e) => { if (hmenuEl && !hmenuEl.contains(e.target) && !e.target.closest?.(".dia-layout")) closeHMenu(); };
+    // The header buttons open small dropdowns: the layout button (History, Skills) and the model picker.
+    // History, Skills and the model manager then open as full-size sheets (they have lists to scroll).
+    const onHMenuDown = (e) => { if (hmenuEl && !hmenuEl.contains(e.target) && !e.target.closest?.(".dia-layout, .dia-modelbtn")) closeHMenu(); };
     function closeHMenu() {
       if (!hmenuEl) return;
-      hmenuEl.remove(); hmenuEl = null;
-      panel?.querySelector(".dia-layout")?.classList.remove("dia-open");
+      hmenuEl.remove(); hmenuEl = null; hmenuKind = "";
+      panel?.querySelectorAll(".dia-layout, .dia-modelbtn").forEach((b) => b.classList.remove("dia-open"));
       document.removeEventListener("pointerdown", onHMenuDown, true);
     }
-    function openHeaderMenu() {
-      if (hmenuEl) { closeHMenu(); return; }
+    function showHMenu(kind, btnSel, cls, ...items) {
       closePop(); closeSheet();
-      const choice = (ico, label, detail, fn) => h("button", { className: "dia-menu-choice", onclick: () => { closeHMenu(); fn(); } },
-        icon(ico), h("span", { className: "dia-menu-choice-main" },
-          h("span", { className: "dia-menu-choice-title", textContent: label }),
-          h("span", { className: "dia-menu-choice-sub", textContent: detail })));
-      hmenuEl = h("div", { className: "dia-hmenu" },
-        choice("history", "Chat history", "Search, reopen, or delete saved chats", () => openHistory()),
-        choice("spark", "Skills", "Choose or edit saved prompts", () => openSkills()),
-        choice("sidebar", dockSide() === "left" ? "Move sidebar to the right" : "Move sidebar to the left", "Change which side of the page the chat uses", () => {
-          setPref("side", dockSide() === "left" ? "right" : "left");
-          updateDock();
-        }));
+      hmenuEl = h("div", { className: "dia-hmenu " + cls }, ...items);
+      hmenuKind = kind;
       panel.append(hmenuEl);
-      panel.querySelector(".dia-layout")?.classList.add("dia-open");
+      panel.querySelector(btnSel)?.classList.add("dia-open");
       setTimeout(() => { if (hmenuEl) document.addEventListener("pointerdown", onHMenuDown, true); }, 0);
+    }
+    const menuChoice = (ico, label, detail, fn, active) => h("button", { className: "dia-menu-choice" + (active ? " dia-active" : ""), onclick: () => { closeHMenu(); fn(); } },
+      ico ? icon(ico) : h("span", { className: "dia-ico-gap" }),
+      h("span", { className: "dia-menu-choice-main" },
+        h("span", { className: "dia-menu-choice-title", textContent: label }),
+        ...(detail ? [h("span", { className: "dia-menu-choice-sub", textContent: detail })] : [])));
+    function openHeaderMenu() {
+      if (hmenuKind === "layout") { closeHMenu(); return; }
+      closeHMenu();
+      showHMenu("layout", ".dia-layout", "dia-lmenu",
+        menuChoice("history", "Chat history", "Search, reopen, or delete saved chats", () => openHistory()),
+        menuChoice("spark", "Skills", "Choose or edit saved prompts", () => openSkills()));
+    }
+    function openModelMenu() {
+      if (hmenuKind === "models") { closeHMenu(); return; }
+      closeHMenu();
+      const cur = activeModel();
+      showHMenu("models", ".dia-modelbtn", "dia-mmenu",
+        ...allModels().map((m) => menuChoice(m.id === cur.id ? "check" : null, m.name, `${m.model} · ${m.builtin ? "on this Mac" : hostOf(m.base) || m.base}`, () => pickModel(m), m.id === cur.id)),
+        h("div", { className: "dia-menu-rule" }),
+        menuChoice("plus", "Add or manage models…", "Ollama, LM Studio, OpenRouter, OpenAI…", () => openModels()));
+    }
+    // the model applies to the next message; it is shared by every chat and window
+    function pickModel(m) { setPref("activemodel", m.id); refreshModel(); focusInput(); }
+    function refreshModel() {
+      if (!modelBtnEl) return;
+      const m = activeModel();
+      modelBtnEl.querySelector(".dia-modelname").textContent = m.name;
+      modelBtnEl.title = `Model: ${m.name} (${m.model}). Click to switch.`;
+    }
+
+    // ----- model manager sheet: add, edit, delete OpenAI-compatible models -----
+    function openModels(startNew) {
+      const body = h("div", { className: "dia-sheet-body" });
+      openSheet("Models", body);
+      const row = (m) => h("div", { className: "dia-row-item", onclick: () => { closeSheet(); pickModel(m); } },
+        h("div", { className: "dia-row-main" },
+          h("div", { className: "dia-row-title", textContent: m.name + (m.id === activeModel().id ? "  ·  in use" : "") }),
+          h("div", { className: "dia-row-sub", textContent: `${m.model} · ${m.builtin ? "address and key are in the mod's settings" : hostOf(m.base) || m.base}` })),
+        ...(m.builtin ? [] : [
+          h("button", { className: "dia-icon", title: "Edit", onclick: (e) => { e.stopPropagation(); form(m); } }, icon("edit")),
+          h("button", { className: "dia-icon", title: "Delete", onclick: (e) => {
+            e.stopPropagation();
+            if (pref("activemodel", "apple") === m.id) setPref("activemodel", "apple");
+            store.saveModels(store.models().filter((x) => x.id !== m.id)).then(() => { refreshModel(); paint(); });
+          } }, icon("trash")),
+        ]));
+      const paint = () => {
+        const mine = allModels().filter((m) => !m.builtin);
+        body.replaceChildren(
+          h("button", { className: "dia-btn", textContent: "＋ Add model", onclick: () => form(null) }),
+          h("div", { className: "dia-menu-sep", textContent: "Your models" }),
+          ...(mine.length ? mine.map(row) : [h("div", { className: "dia-note", textContent: "Nothing yet. Add any OpenAI-compatible server (Ollama, LM Studio, OpenRouter, OpenAI…), then switch between models from the top of the sidebar." })]),
+          h("div", { className: "dia-menu-sep", textContent: "Built in" }),
+          row(builtinModel()));
+      };
+      const form = (m) => {
+        const name = h("input", { type: "text", value: m?.name || "", placeholder: "e.g. Llama 3.1 (Ollama)" });
+        const base = h("input", { type: "text", value: m?.base || "", placeholder: "http://localhost:11434/v1" });
+        const mid = h("input", { type: "text", value: m?.model || "", placeholder: "Model ID, e.g. llama3.1:8b" });
+        const key = h("input", { type: "password", value: m?.key || "", placeholder: "Only if the server needs one" });
+        const small = h("input", { type: "checkbox", checked: !!m?.small });
+        const vision = h("input", { type: "checkbox", checked: !!m?.vision });
+        const status = h("div", { className: "dia-note" });
+        const found = h("div", { className: "dia-found" });
+        const find = h("button", { className: "dia-btn", textContent: "Find models", title: "Ask the server which models it offers", onclick: async () => {
+          const b = normBase(base.value);
+          if (!/^https?:\/\//i.test(b)) { base.focus(); status.textContent = "Enter the server address first (starting with http:// or https://)."; return; }
+          find.disabled = true; status.textContent = "Looking…"; found.replaceChildren();
+          try {
+            const k = key.value.trim();
+            const j = JSON.parse(await httpGet(b + "/models", k ? { authorization: `Bearer ${k}`, "x-api-key": k } : {}));
+            const ids = (Array.isArray(j) ? j : j.data || j.models || []).map((x) => (typeof x === "string" ? x : x.id || x.name || x.model)).filter(Boolean).slice(0, 80);
+            status.textContent = ids.length ? "Tap one to use it:" : "That server didn't list any models. Type the model ID yourself.";
+            found.replaceChildren(...ids.map((id) => h("button", { className: "dia-chip", textContent: id, title: id, onclick: () => { mid.value = id; if (!name.value.trim()) name.value = id; } })));
+          } catch (e) { status.textContent = "Couldn't list models from that server (" + String(e.message || e).slice(0, 120) + "). You can still type the model ID yourself."; }
+          find.disabled = false;
+        } });
+        const save = h("button", { className: "dia-btn dia-primary", textContent: "Save model", onclick: async () => {
+          const b = normBase(base.value), mi = mid.value.trim();
+          if (!/^https?:\/\//i.test(b)) { base.focus(); status.textContent = "The server address must start with http:// or https://."; return; }
+          if (!mi) { mid.focus(); status.textContent = "Enter the model ID (or use Find models)."; return; }
+          const entry = { id: m?.id || "m" + Date.now().toString(36), name: (name.value.trim() || mi).slice(0, 40), base: b, model: mi, key: key.value.trim(), small: small.checked, vision: vision.checked };
+          const cur = store.models();
+          await store.saveModels(cur.some((x) => x.id === entry.id) ? cur.map((x) => (x.id === entry.id ? entry : x)) : [...cur, entry]);
+          refreshModel();
+          paint();
+        } });
+        body.replaceChildren(h("div", { className: "dia-form" },
+          h("label", { textContent: "Name" }), name,
+          h("label", { textContent: "Server address (OpenAI-compatible)" }), base,
+          h("label", { textContent: "Model ID" }), mid,
+          h("div", { className: "dia-edit-row" }, find), status, found,
+          h("label", { textContent: "API key" }), key,
+          h("label", { className: "dia-check" }, small, h("span", { textContent: "Small context window (tick for on-device or local models limited to about 4K tokens)" })),
+          h("label", { className: "dia-check" }, vision, h("span", { textContent: "Can read images" })),
+          h("div", { className: "dia-note", textContent: "Saved in your Firefox profile folder, not sent anywhere except to this server." }),
+          h("div", { className: "dia-edit-row" }, h("button", { className: "dia-btn", textContent: "Cancel", onclick: paint }), save)));
+        name.focus();
+      };
+      if (startNew === true) form(null); else paint();
     }
 
     // keepSplit: re-attach the other split pane(s) as locked pills. open() passes false because it
@@ -2929,11 +3092,15 @@
 
     function build() {
       ensureDock();
+      modelBtnEl = h("button", { className: "dia-modelbtn", onclick: (e) => { e.stopPropagation(); openModelMenu(); } }, h("span", { className: "dia-modelname" }), icon("chev"));
       const head = h("div", { className: "dia-head" },
-        h("button", { className: "dia-icon dia-new", title: "New chat", onclick: () => newChat() }, icon("new")),
+        h("div", { className: "dia-head-left" },
+          h("button", { className: "dia-icon dia-new", title: "New chat", onclick: () => newChat() }, icon("new")),
+          modelBtnEl),
         h("div", { className: "dia-head-right" },
-          h("button", { className: "dia-icon dia-layout", title: "Chat history, Skills and layout", onclick: (e) => { e.stopPropagation(); openHeaderMenu(); } }, icon("sidebar"), icon("chevs")),
+          h("button", { className: "dia-icon dia-layout", title: "Chat history and Skills", onclick: (e) => { e.stopPropagation(); openHeaderMenu(); } }, icon("sidebar"), icon("chevs")),
           h("button", { className: "dia-icon dia-close", title: `Hide (${SHORTCUT}), your chat is kept for this tab`, onclick: () => dismiss() }, icon("close"))));
+      refreshModel();
       logEl = h("div", { className: "dia-log" });
       cardsEl = h("div", { className: "dia-cards" });
       pillsEl = h("div", { className: "dia-pills" });
@@ -3041,7 +3208,7 @@
     }
 
     self = {
-      open, sync, dismiss, restore, close, onNav, refreshAttach, addRef,
+      open, sync, dismiss, restore, close, onNav, refreshAttach, refreshModel, addRef,
       has: (t) => isMember(t),
       get src() { return src; },
       get visible() { return !!panel && !panel.hidden; },
@@ -3104,8 +3271,9 @@
   gBrowser.tabContainer.addEventListener("TabSelect", onSelect);
   gBrowser.tabContainer.addEventListener("TabClose", onTabClose);
   // settings take effect immediately (side, text size, colours, search mode, URL bar button…)
-  const prefObserver = { observe() { try { syncAll(); sessions.forEach((s) => s.refreshAttach()); applyUrlbarPref(); } catch (e) { console.warn("[dia-sidebar] settings", e); } } };
+  const prefObserver = { observe() { try { syncAll(); sessions.forEach((s) => { s.refreshAttach(); s.refreshModel(); }); applyUrlbarPref(); } catch (e) { console.warn("[dia-sidebar] settings", e); } } };
   try { Services.prefs.addObserver(PREF, prefObserver); } catch (e) { console.warn("[dia-sidebar] settings observer", e); }
+  try { Services.prefs.addObserver("zen.tabs.vertical", prefObserver); } catch (e) { console.warn("[dia-sidebar] tab sidebar observer", e); } // follow the tab sidebar when it switches sides
 
   const progressListener = {
     onLocationChange(browser, webProgress) {
@@ -3195,6 +3363,7 @@
     destroy() {
       for (const s of [...sessions.values()]) s.close(true);
       try { Services.prefs.removeObserver(PREF, prefObserver); } catch {}
+      try { Services.prefs.removeObserver("zen.tabs.vertical", prefObserver); } catch {}
       if (btnTimer) clearInterval(btnTimer);
       urlBtn?.remove();
       styleEl.remove();
