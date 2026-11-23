@@ -25,8 +25,7 @@ Drop onto the sidebar (a "Drop to add as context" overlay appears):
   and text or code files. Paste images straight into the box too.
 - **Selected text**: select text on the page and it appears as a Selection card, or right-click → *Ask Chat about selection*.
 
-The current page is attached automatically as the pill in the bottom row (click it to leave the page out). The **camera** button attaches a screenshot of the page as a *Capture* card for models that can see images. Up to 12 cards at a time.
-Anthropic and Gemini read PDFs and images natively; Apple Intelligence is text-only, so images are ignored there.
+The current page is attached automatically as the pill in the bottom row (click it to leave the page out). The **camera** button attaches a screenshot as a *Capture* card; Apple Intelligence is text-only, so image content is ignored. Up to 12 cards at a time.
 
 ## Chat
 
@@ -38,9 +37,8 @@ Anthropic and Gemini read PDFs and images natively; Apple Intelligence is text-o
   proposal and press Apply, nothing happens automatically).
 - **Stop & Resume**, **Regenerate**, **Copy**, **Edit** your messages or the model's answers. Type while an
   answer is streaming and your message is queued (*Edit* it, or *Send now* to interrupt).
-- **Web search**: the model can search the web and cite what it found (see below).
-- **Thinking** is shown and collapsed when the model streams it (Anthropic and Gemini: enable in settings).
-- **History** and **Skills** are in the menu next to the close button (the layout icon), which also moves the sidebar to the other side. History keeps past chats with search, restore and delete. Stored in your profile folder as
+- **Web search**: search when you ask, and cite what it found (see below).
+- **History** and **Skills** are in a full-size sheet from the header menu, which also moves the sidebar to the other side. History keeps past chats with search, restore and delete. Stored in your profile folder as
   `dia-sidebar-chats.json` (it includes the page text each chat was about). Turn it off in settings.
 - **YouTube**: reads the transcript (works regardless of interface language) and summarizes automatically on
   videos. *Key moments* come with clickable **[mm:ss]** timestamps that seek the player.
@@ -50,55 +48,33 @@ Anthropic and Gemini read PDFs and images natively; Apple Intelligence is text-o
 
 ## Web search
 
-Search is **automatic**, like Dia: ask about news, prices, scores, people, products, "latest" anything, or
-tell it to look something up, and the assistant searches by itself. Questions about the page, rewriting,
-translating and Skills don't trigger a search. **Search the web** in the **+** menu (or **@Web**) forces a search for the
-whole chat and shows a small *Web* chip. Answers show *Searched “…”* and the sources as chips under the answer. How it searches depends
-on the provider:
-
-- **Gemini** (Google Search) and **Anthropic** (web search tool) use their own built-in tools and decide on
-  their own, and are told to search whenever a question needs it.
-- **Apple Intelligence, OpenAI-compatible, Ollama and others** have no search tool, so the mod searches from
-  your browser: the model writes a query, the mod searches (DuckDuckGo by default; Brave or your own SearXNG
-  in settings), reads the top three pages, and the answer cites them as clickable **[1] [2]**. Clearly
-  current questions ("today", "latest", "price of…") search immediately; for the rest, a quick check asks the
-  model whether a search is needed first.
-- If Gemini or Anthropic **refuse their search tool** (plan, region, model), the mod switches to the
-  browser-side search for the rest of the session instead of failing.
-- Settings → *Web search* can switch this to "only when I ask" or Off. Fetched pages are never saved
-  to history, only the list of sources.
+Web search is **manual** to keep the on-device model focused and avoid an extra routing request. Choose
+**Search the web** in the **+** menu or type **@Web**; the mod searches with DuckDuckGo, reads up to three
+pages, and gives the answer clickable **[1] [2]** citations. Answers show *Searched “…”* and source chips.
+Fetched page text is not saved to history.
 
 ## AI backends (Sine → this mod → settings)
 
-- **Apple Intelligence (default).** On-device via afm-server (default `http://127.0.0.1:11435/v1`, change it with *Server address*). If you enabled API-key protection in afm-server, enter that key in the mod's *API key* setting; requests use `Authorization: Bearer`. Long pages
-  are condensed to fit its small context.
-- **Anthropic (Claude).** Needs an API key. Supports PDFs, images, extended thinking and built-in web search.
-- **Google Gemini.** Needs an API key from Google AI Studio. Leave *Model* blank to always use the **newest
-  Gemini Flash** your key can access (it asks Google which models exist, so a retired model ID never breaks
-  chat); type `flash-lite` or `pro` for those families, or an exact ID such as `gemini-3.8-flash`. If a model
-  is unavailable it falls through to the next newest, and a model that rejects the thinking setting is retried
-  without it. Uses Google's native API for Google Search grounding, PDFs, images and thinking. Pointing the
-  *OpenAI-compatible* provider at Gemini's compatibility endpoint also works for plain chat, but that endpoint
-  has no search, so prefer this provider.
-- **Any OpenAI-compatible endpoint**: OpenAI, Groq, a local Ollama, and so on.
-- **No key / server unreachable.** Falls back to an instant offline extractive summary.
+This build uses **Apple Intelligence via AFM Server** with the fixed model `apple.local`. The default
+address is `http://127.0.0.1:11435/v1`. Change it only if you configured AFM Server to use another port.
+Leave the API key blank unless key protection is enabled in AFM Server. Page and attachment text is
+condensed and capped, and only a short recent chat is sent, to leave room inside Apple's 4,096-token
+on-device context window for the answer. If the server cannot be reached, the chat shows the server
+error.
 
 ## Settings
 
-Sine → this mod → settings. Everything is grouped and applies immediately (no restart). Fields that don't apply
-to your provider are hidden (for example, no API key box for Apple Intelligence).
+Sine → this mod → settings. The AI backend and model are fixed to AFM Server and `apple.local`; the short settings list only includes what this model needs.
 
-- **AI model**: provider, API key, model, server address, and whether to show the model's thinking.
-- **Chat**: answer length (concise / balanced / detailed), reply language, custom instructions, automatic
-  summaries, and whether Enter sends or adds a new line.
+- **Apple Intelligence**: AFM Server address and its optional API key.
+- **Chat**: answer length (concise / balanced), automatic summaries, and whether Enter sends or adds a new line.
 - **Context**: attach the current page automatically, attach text selected on the page, YouTube timestamps.
-- **Web search**: automatic / only when I ask / off, plus the search engine for models without
-  built-in search (DuckDuckGo, Brave, SearXNG).
+- **Web search**: only when asked or off. DuckDuckGo is used when you request a search.
 - **Appearance**: sidebar on the left or right, match your Zen space or use neutral colours, text size, and
   whether the URL bar button is shown. Drag the sidebar's edge to resize it (double-click the edge to reset).
-- **Privacy**: save chat history or not. **Advanced**: the Summarize instruction and the page-text limit.
+- **Privacy**: save chat history or not.
 
-Settings from earlier versions (separate server addresses, search key fields) still work as a fallback.
+Older AFM server address preferences still work as a fallback. Provider and model selections are no longer used.
 
 ## Not included
 
@@ -126,7 +102,7 @@ reinstall from a repo (above), or save this script over the old one under its or
    icons) and gets a subtle highlight while the sidebar is open. No icon at all means the script isn't running: check
    the two Sine steps above.
 2. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see
-   `[dia-sidebar] loaded v2.0.0`. A wrong script filename shows up as `[Sine]: Failed to load script`. If
+   `[dia-sidebar] loaded v2.0.2`. A wrong script filename shows up as `[Sine]: Failed to load script`. If
    clicking the icon does nothing, look for `[dia-sidebar] couldn't open the sidebar` and the error under it.
 
 ## Notes

@@ -14,7 +14,7 @@
   const SEL_MSG = "dia-sidebar:selection";
   const MAX_CHARS = 24000;
   const MAX_REFS = 12;
-  const VERSION = "2.0.1";
+  const VERSION = "2.0.2";
   const DEFAULT_PROMPT = "Summarize this page into concise bullet points.";
   const SYSTEM =
     "You are an AI assistant living in a sidebar next to the web page the user is viewing. " +
@@ -159,7 +159,6 @@
   .dia-head .dia-icon .dia-svg { width: 20px; height: 20px; }
   .dia-head .dia-layout { width: auto; padding: 0 6px 0 8px; display: inline-flex; align-items: center; gap: 1px; }
   .dia-head .dia-layout .dia-svg:last-child { width: 13px; height: 13px; }
-  .dia-hmenu { top: 54px; right: 12px; left: auto; bottom: auto; width: 280px; max-width: calc(100% - 24px); max-height: min(360px, calc(100% - 64px)); overflow-y: auto; overscroll-behavior: contain; }
 
   /* conversation */
   .dia-log { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--soft2) transparent; display: flex; flex-direction: column; gap: 22px; padding: 10px 18px 18px; }
@@ -326,19 +325,24 @@
   .dia-menu { position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; z-index: 10; max-height: 300px; overflow-y: auto; scrollbar-width: thin; padding: 5px; background: var(--pop); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 14px 38px rgba(0, 0, 0, 0.28); animation: dia-in 0.2s var(--ease) both; }
   .dia-menu-sep { font-size: 11px; color: var(--mute); padding: 8px 10px 3px; letter-spacing: 0.02em; }
   .dia-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; text-align: start; appearance: none; border: 0; cursor: pointer; background: transparent; padding: 7px 10px; border-radius: 9px; font-size: 13px; }
-  .dia-hmenu .dia-menu-item { padding: 9px 12px; font-size: 14px; }
   .dia-menu-item:hover, .dia-menu-item.dia-active { background: var(--soft); }
   .dia-menu-item > .dia-svg { color: var(--mute); }
   .dia-menu-item img.dia-menu-ico { width: 16px; height: 16px; border-radius: 4px; flex: none; }
   .dia-menu-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dia-menu-sub { color: var(--mute); font-size: 11.5px; white-space: nowrap; }
+  .dia-menu-choice { appearance: none; flex: 0 0 auto; width: 100%; display: flex; align-items: center; gap: 12px; box-sizing: border-box; padding: 14px 12px; text-align: start; border: 0; border-bottom: 1px solid var(--line); border-radius: 12px; color: inherit; background: transparent; cursor: pointer; font: inherit; }
+  .dia-menu-choice:hover { background: var(--soft); }
+  .dia-menu-choice > .dia-svg { color: var(--mute); }
+  .dia-menu-choice-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .dia-menu-choice-title { font-weight: 600; }
+  .dia-menu-choice-sub { color: var(--mute); font-size: 12px; }
 
   /* history / skills sheet */
   .dia-sheet { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--panel); background-attachment: fixed; border-radius: inherit; animation: dia-in 0.25s var(--ease) both; }
-  .dia-sheet-head { display: flex; align-items: center; gap: 6px; padding: 12px 10px 6px 18px; font-weight: 600; font-size: 13px; }
+  .dia-sheet-head { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; padding: 12px 10px 6px 18px; font-weight: 600; font-size: 13px; }
   .dia-sheet-head span { flex: 1; }
-  .dia-sheet-body { flex: 1 1 0%; height: 0; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: auto; padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 2px; }
-  .dia-search { display: flex; align-items: center; gap: 8px; margin: 2px 12px 8px; padding: 7px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); color: var(--mute); }
+  .dia-sheet-body { flex: 1 1 0%; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: auto; padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+  .dia-search { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; margin: 2px 12px 8px; padding: 7px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); color: var(--mute); }
   .dia-search input { flex: 1; min-width: 0; border: 0 !important; outline: 0 !important; background: transparent !important; color: var(--fg); font: inherit; padding: 0 !important; }
   .dia-row-item { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 10px; border-radius: 12px; cursor: pointer; }
   .dia-row-item:hover { background: var(--soft); }
@@ -404,7 +408,8 @@
   const setPref = (k, v) => { try { Services.prefs.setStringPref(PREF + k, String(v)); } catch {} };
   // checkboxes in Sine's settings are real booleans
   const bool = (k, d) => { try { return Services.prefs.getBoolPref(PREF + k); } catch { return d; } };
-  const provider = () => pref("provider", "apple");
+  // This build is tuned for AFM Server's on-device Apple model.
+  const provider = () => "apple";
   const apiKey = () => pref("apikey", "").trim();
   // one "Server address" setting (older versions had a separate one per provider; those still work)
   const server = () => (pref("server", "") || (provider() === "apple" ? pref("applebase", "") : pref("baseurl", ""))).trim();
@@ -413,8 +418,7 @@
       .trim()
       .replace(/\/+$/, "")
       .replace(/^(https?:\/\/[^/]+)$/, provider() === "apple" ? "$1/v1" : "$1");
-  const model = () =>
-    pref("model", "") || ({ anthropic: "claude-haiku-5-5", apple: "apple.local", gemini: "flash" }[provider()] || "gpt-4o-mini");
+  const model = () => "apple.local";
   const isNative = () => provider() === "anthropic" || provider() === "gemini"; // has its own web-search tool and reads PDFs natively
   const rawPdf = () => isNative(); // models that read PDF bytes directly
   const llmReady = () =>
@@ -422,14 +426,14 @@
       ? !!apiKey()
       : provider() === "apple" || !!apiKey() || /localhost|127\.0\.0\.1/.test(baseUrl());
   const isLocal = () => provider() === "apple" || /localhost|127\.0\.0\.1/.test(baseUrl());
-  // Apple's on-device model has a tiny context (chunk hard); other local models handle far more.
-  const chunkSize = () => parseInt(pref("maxchars", ""), 10) || (provider() === "apple" ? 6000 : isLocal() ? 16000 : MAX_CHARS);
+  // Keep page text small for Apple's fixed 4,096-token on-device context window.
+  const chunkSize = () => 4200; // reserve room inside Apple's 4,096-token on-device context for the prompt and answer
   const thinkBudget = () => (isNative() ? parseInt(pref("thinking", "0"), 10) || 0 : 0);
   // "auto" (default, like Dia): the assistant searches the web by itself whenever the question needs it.
   // "manual": only when you turn the globe on / use @Web. "off": never.
   const webMode = () => {
-    const v = pref("websearch", "auto");
-    return v === "default" ? "auto" : v;
+    const v = pref("websearch", "manual");
+    return v === "default" || v === "auto" ? "manual" : v;
   };
   // if Anthropic/Gemini reject their built-in search tool (plan, region, model), we search from the browser instead
   const searchBroken = new Set(); // providers whose built-in search tool was refused (remembered per provider)
@@ -597,6 +601,23 @@
     let text = parts.join("\n");
     if (text.length < 200) text = (doc.body?.textContent || "").replace(/\s+/g, " ").trim();
     sendAsyncMessage("dia-sidebar:text", { title: doc.title, url: doc.location.href, text });
+  }
+
+  // Read the live document from browser chrome first. This avoids depending on ReaderMode, which
+  // is missing from some Zen builds, and also handles pages that do not report through messageManager.
+  function extractFromDocument(doc) {
+    const root = doc.querySelector("article, main, [role=main], #mw-content-text, #content") || doc.body;
+    if (!root) return "";
+    const skip = "nav, footer, aside, header, form, .navbox, .reflist, .references, .toc, #toc, .mw-editsection";
+    const parts = [];
+    for (const el of root.querySelectorAll("h1,h2,h3,p,li,blockquote")) {
+      if (el.closest(skip)) continue;
+      const t = (el.textContent || "").replace(/\s+/g, " ").replace(/\[\d+\]/g, "").trim();
+      if (t.length > 1) parts.push(t);
+    }
+    let text = parts.join("\n");
+    if (text.length < 200) text = (root.innerText || doc.body?.innerText || root.textContent || "").replace(/\s+/g, " ").trim();
+    return text;
   }
 
   // Runs inside the page: reports text the user selects (after mouse/keyboard selection)
@@ -928,8 +949,16 @@
   }
 
   async function getPageText(browser) {
-    const vid = ytId(browser.currentURI.spec);
-    if (vid) return getYouTubeTranscript(browser, browser.currentURI.spec); // throws on no transcript (handled by caller)
+    const url = browser.currentURI.spec;
+    const vid = ytId(url);
+    if (vid) return getYouTubeTranscript(browser, url); // throws on no transcript (handled by caller)
+    try {
+      const doc = browser.contentDocument;
+      const text = doc?.body ? extractFromDocument(doc) : "";
+      if (text) return { title: doc.title || browser.contentTitle || "Page", url, text };
+    } catch (e) {
+      console.warn("[dia-sidebar] direct page read failed, trying messageManager", e);
+    }
     try {
       const mm = browser.messageManager;
       const data = await new Promise((resolve, reject) => {
@@ -950,12 +979,9 @@
       });
       if (data?.text) return data;
     } catch (e) {
-      console.warn("[dia-sidebar] frame script failed, trying reader mode", e);
+      console.warn("[dia-sidebar] frame script page read failed", e);
     }
-    const { ReaderMode } = ChromeUtils.importESModule("resource://gre/modules/ReaderMode.sys.mjs");
-    const art = await ReaderMode.downloadAndParseDocument(browser.currentURI.spec);
-    if (!art?.textContent) throw new Error("couldn't read this page");
-    return { title: art.title, url: browser.currentURI.spec, text: art.textContent.replace(/\s+/g, " ") };
+    throw new Error("Zen could not read this page's text. Try selecting the relevant text and attaching it to your message.");
   }
 
   // ---------- offline extractive summarizer ----------
@@ -991,9 +1017,9 @@
       (status === 401 || status === 403 ? " (check the API key / access settings of your AI server)" : "");
   };
 
-  // AFM Server's OpenAI-compatible endpoint uses the standard Bearer token header.
+  // Keep both key headers for compatibility with AFM Server builds that use either name.
   const authHeaders = () =>
-    apiKey() ? { authorization: `Bearer ${apiKey()}` } : {};
+    apiKey() ? { authorization: `Bearer ${apiKey()}`, "x-api-key": apiKey() } : {};
 
   async function* fetchChunks(url, headers, body, signal) {
     const res = await fetch(url, { method: "POST", signal, headers, body });
@@ -1406,7 +1432,7 @@
     return (root?.textContent || "").replace(/\s+/g, " ").trim();
   }
   async function webSearch(q, signal) {
-    const eng = pref("searchengine", "duckduckgo");
+    const eng = "duckduckgo"; // keep local-model settings simple; no external search API key is needed
     const enc = encodeURIComponent(q);
     let results = [];
     if (eng === "brave") {
@@ -1950,7 +1976,7 @@
     // the camera button: attach a screenshot of the page (for models that can see images)
     async function addCapture() {
       if (!srcUrl() && !src.linkedBrowser) return;
-      if (!canSeeFiles()) flashNote("The on-device model can't see images. Pick another provider in settings.");
+      if (!canSeeFiles()) flashNote("AFM Server's apple.local model is text-only; image contents won't be analyzed.");
       else flashNote("Capturing…", true);
       const cap = await captureBrowser(src.linkedBrowser);
       if (!cap) { flashNote("Couldn't capture this page."); return; }
@@ -1998,7 +2024,7 @@
       }
       flashNote("Reading PDF…", true);
       const text = await pdfText(buf);
-      if (!text) { flashNote("Couldn't read that PDF's text (PDFs work best with Anthropic or Gemini)."); return false; }
+      if (!text) { flashNote("Couldn't read that PDF's text. AFM Server's apple.local model needs text; try copying the relevant passage into chat."); return false; }
       clearNote();
       addContext({ kind: "file", label: name, url, text: text.slice(0, 24000) });
       return true;
@@ -2008,7 +2034,7 @@
       if (/^image\/(png|jpe?g|gif|webp)$/.test(f.type)) {
         if (f.size > 8e6) { flashNote("That image is over 8 MB."); return; }
         const dataUrl = await readDataUrl(f);
-        if (!canSeeFiles()) flashNote("The on-device model can't see images — pick another provider in settings.");
+        if (!canSeeFiles()) flashNote("AFM Server's apple.local model is text-only; image contents won't be analyzed.");
         addContext({ kind: "image", label: name, mime: f.type, b64: dataUrl.split(",")[1], dataUrl, text: "[image: " + name + "]" });
       } else if (f.type === "application/pdf" || /\.pdf$/i.test(name)) {
         if (f.size > 25e6) { flashNote("That PDF is over 25 MB."); return; }
@@ -2222,7 +2248,8 @@
         t += `\n\n=== ${refHead(r)} ===\n${(r.text || "").slice(0, cap)}`;
       }
       if (m.manage && withTabs) t += `\n\n=== OPEN TABS ===\n${tabListText(tabSnap)}\n\n${TABS_PROTOCOL}`;
-      return t;
+      // Keep a pile of attachments from overwhelming the small on-device context window.
+      return apple && t.length > 3600 ? t.slice(0, 3560) + "\n[…additional request or attachment text omitted]" : t;
     }
     // Every request is rebuilt from scratch. Cloud/large models get the page in the system prompt plus
     // real multi-turn history. Apple's tiny on-device model ignores history, so it gets one flattened turn.
@@ -2238,13 +2265,16 @@
       const pageBlock = page && !page.none ? `=== PAGE THE USER IS VIEWING ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${ctx}` : "";
       if (provider() === "apple") {
         const upto = resuming ? convo : convo.slice(0, convo.lastIndexOf(lastU));
-        const transcript = upto.slice(-4).map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${(m.label || m.content).slice(0, 1200)}`).join("\n");
+        const transcript = upto.slice(-2).map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${(m.label || m.content).slice(0, 500)}`).join("\n");
+        const fit = (text, limit) => text.length <= limit ? text : text.slice(0, limit - 44) + "\n[…context shortened for the on-device model]";
+        const pageContext = fit(pageBlock, webCtx ? 3000 : 4200);
+        const webContext = webCtx ? fit(webCtx.text, 1800) : "";
         const ask = resuming ? "Continue your previous answer exactly where it stopped, without repeating it." : userText(lastU || { content: req }, true);
         return {
           system: systemPrompt(), pageBlock: "", web: false,
           messages: [{ role: "user", content:
-            (pageBlock ? "Use the web page below to respond to the user's request. Be concise.\n\n" + pageBlock + "\n\n" : "") +
-            (webCtx ? webCtx.text + "\n\n" : "") +
+            (pageContext ? "Use the web page below to respond to the user's request. Be concise.\n\n" + pageContext + "\n\n" : "") +
+            (webContext ? webContext + "\n\n" : "") +
             (transcript ? `=== CONVERSATION SO FAR ===\n${transcript}\n\n` : "") + `=== REQUEST ===\n${ask}` }],
         };
       }
@@ -2796,7 +2826,7 @@
         const draft = h("button", { className: "dia-btn", textContent: "✦ Write it for me", title: "Describe what you want in a sentence, then let the model write the skill", onclick: async () => {
           const d = prompt.value.trim() || name.value.trim();
           if (!d) { prompt.focus(); return; }
-          if (!llmReady()) { prompt.placeholder = "Set up a provider in the mod's settings to use this."; return; }
+          if (!llmReady()) { prompt.placeholder = "Start AFM Server, then try again."; return; }
           draft.disabled = true; draft.textContent = "Writing…";
           try {
             const out = await askOnce("You turn a user's one-line idea into a reusable AI skill for a browser sidebar that can see the current page. Reply with ONLY JSON: {\"name\": \"2-3 word title\", \"prompt\": \"clear instructions for the assistant, second person, under 80 words\"}.", d);
@@ -2826,21 +2856,26 @@
     // Dia shows nothing in an empty chat: no greeting, no suggestions. Skills live behind / and the header menu.
     function renderEmpty() {}
 
-    // the header's layout button opens a small menu: history, skills, and which side the sidebar is on
-    let hmenu = null;
-    function onHDown(e) { if (hmenu && !hmenu.contains(e.target) && !e.target.closest(".dia-layout")) closeHMenu(); }
-    function closeHMenu() { hmenu?.remove(); hmenu = null; document.removeEventListener("pointerdown", onHDown, true); }
+    // The header button opens a full-size sheet so history and its scrolling list have room.
+    function closeHMenu() {
+      if (sheetEl?.dataset.sheetKind === "header-menu") closeSheet();
+    }
     function openHeaderMenu() {
-      if (hmenu) { closeHMenu(); return; }
+      if (sheetEl?.dataset.sheetKind === "header-menu") { closeSheet(); return; }
       closePop();
-      const row = (ico, label, fn) => h("button", { className: "dia-menu-item", onclick: () => { closeHMenu(); fn(); } }, icon(ico), h("span", { className: "dia-menu-label", textContent: label }));
-      hmenu = h("div", { className: "dia-menu dia-hmenu" },
-        row("history", "Chat history", () => openHistory()),
-        row("spark", "Skills", () => openSkills()),
-        h("div", { className: "dia-menu-sep", textContent: "Layout" }),
-        row("sidebar", dockSide() === "left" ? "Move sidebar to the right" : "Move sidebar to the left", () => { setPref("side", dockSide() === "left" ? "right" : "left"); updateDock(); }));
-      panel.append(hmenu);
-      setTimeout(() => document.addEventListener("pointerdown", onHDown, true), 0);
+      const choice = (ico, label, detail, fn) => h("button", { className: "dia-menu-choice", onclick: () => { closeSheet(); fn(); } },
+        icon(ico), h("span", { className: "dia-menu-choice-main" },
+          h("span", { className: "dia-menu-choice-title", textContent: label }),
+          h("span", { className: "dia-menu-choice-sub", textContent: detail })));
+      const body = h("div", { className: "dia-sheet-body" },
+        choice("history", "Chat history", "Search, reopen, or delete saved chats", () => openHistory()),
+        choice("spark", "Skills", "Choose or edit saved prompts", () => openSkills()),
+        choice("sidebar", dockSide() === "left" ? "Move sidebar to the right" : "Move sidebar to the left", "Change which side of the page the chat uses", () => {
+          setPref("side", dockSide() === "left" ? "right" : "left");
+          updateDock();
+        }));
+      const sheet = openSheet("Chat history, Skills and layout", body);
+      sheet.dataset.sheetKind = "header-menu";
     }
 
     // keepSplit: re-attach the other split pane(s) as locked pills. open() passes false because it

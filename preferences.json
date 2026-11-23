@@ -1,102 +1,21 @@
 [
   {
     "type": "separator",
-    "label": "**AI model**"
-  },
-  {
-    "property": "mod.dia-sidebar.provider",
-    "label": "Provider",
-    "type": "dropdown",
-    "defaultValue": "apple",
-    "placeholder": false,
-    "options": [
-      {
-        "label": "Apple Intelligence (on-device, no key)",
-        "value": "apple"
-      },
-      {
-        "label": "Anthropic Claude",
-        "value": "anthropic"
-      },
-      {
-        "label": "Google Gemini",
-        "value": "gemini"
-      },
-      {
-        "label": "OpenAI-compatible (OpenAI, Groq, Ollama)",
-        "value": "openai"
-      }
-    ]
-  },
-  {
-    "property": "mod.dia-sidebar.apikey",
-    "label": "API key (AFM server key, if enabled)",
-    "type": "string",
-    "defaultValue": "",
-    "placeholder": "Required for cloud providers; optional for a local server"
-  },
-  {
-    "property": "mod.dia-sidebar.model",
-    "label": "Model",
-    "type": "string",
-    "defaultValue": "",
-    "placeholder": "Leave blank for the best default (Gemini: newest Flash)"
+    "label": "**Apple Intelligence**\n*Uses AFM Server with the fixed model apple.local.*"
   },
   {
     "property": "mod.dia-sidebar.server",
-    "label": "Server address",
+    "label": "AFM Server URL",
     "type": "string",
-    "defaultValue": "",
-    "placeholder": "Leave blank for the default",
-    "conditions": [
-      {
-        "if": {
-          "property": "mod.dia-sidebar.provider",
-          "value": "apple"
-        }
-      },
-      {
-        "if": {
-          "property": "mod.dia-sidebar.provider",
-          "value": "openai"
-        }
-      }
-    ]
+    "defaultValue": "http://127.0.0.1:11435/v1",
+    "placeholder": "http://127.0.0.1:11435/v1"
   },
   {
-    "property": "mod.dia-sidebar.thinking",
-    "label": "Show thinking",
-    "type": "dropdown",
-    "defaultValue": "0",
-    "placeholder": false,
-    "options": [
-      {
-        "label": "Off",
-        "value": "0"
-      },
-      {
-        "label": "Light",
-        "value": "2048"
-      },
-      {
-        "label": "Deep",
-        "value": "8000"
-      }
-    ],
-    "conditions": [
-      {
-        "if": {
-          "property": "mod.dia-sidebar.provider",
-          "value": "anthropic"
-        }
-      },
-      {
-        "if": {
-          "property": "mod.dia-sidebar.provider",
-          "value": "gemini"
-        }
-      }
-    ]
+    "property": "mod.dia-sidebar.apikey",
+    "label": "AFM Server API key (only if enabled in AFM Server)",
+    "type": "string",
+    "defaultValue": "",
+    "placeholder": "Leave blank unless AFM Server requires a key"
   },
   {
     "type": "separator",
@@ -116,26 +35,8 @@
       {
         "label": "Balanced",
         "value": "balanced"
-      },
-      {
-        "label": "Detailed",
-        "value": "detailed"
       }
     ]
-  },
-  {
-    "property": "mod.dia-sidebar.language",
-    "label": "Reply language",
-    "type": "string",
-    "defaultValue": "",
-    "placeholder": "Blank = the language I write in"
-  },
-  {
-    "property": "mod.dia-sidebar.instructions",
-    "label": "Custom instructions",
-    "type": "string",
-    "defaultValue": "",
-    "placeholder": "e.g. Keep it casual. Use British spelling."
   },
   {
     "property": "mod.dia-sidebar.autosummarize",
@@ -194,13 +95,9 @@
     "property": "mod.dia-sidebar.websearch",
     "label": "Search the web",
     "type": "dropdown",
-    "defaultValue": "auto",
+    "defaultValue": "manual",
     "placeholder": false,
     "options": [
-      {
-        "label": "Automatic (recommended)",
-        "value": "auto"
-      },
       {
         "label": "Only when I ask (+ menu or @Web)",
         "value": "manual"
@@ -208,56 +105,6 @@
       {
         "label": "Off",
         "value": "off"
-      }
-    ]
-  },
-  {
-    "property": "mod.dia-sidebar.searchengine",
-    "label": "Search engine",
-    "type": "dropdown",
-    "defaultValue": "duckduckgo",
-    "placeholder": false,
-    "options": [
-      {
-        "label": "DuckDuckGo",
-        "value": "duckduckgo"
-      },
-      {
-        "label": "Brave Search",
-        "value": "brave"
-      },
-      {
-        "label": "SearXNG",
-        "value": "searxng"
-      }
-    ],
-    "conditions": [
-      {
-        "if": {
-          "property": "mod.dia-sidebar.provider",
-          "value": "apple"
-        }
-      },
-      {
-        "if": {
-          "property": "mod.dia-sidebar.provider",
-          "value": "openai"
-        }
-      }
-    ]
-  },
-  {
-    "property": "mod.dia-sidebar.searchsetup",
-    "label": "Brave API key or SearXNG address",
-    "type": "string",
-    "defaultValue": "",
-    "placeholder": "Only needed for Brave or SearXNG",
-    "conditions": [
-      {
-        "not": {
-          "property": "mod.dia-sidebar.searchengine",
-          "value": "duckduckgo"
-        }
       }
     ]
   },
@@ -335,22 +182,5 @@
     "label": "Save chat history on this computer",
     "type": "checkbox",
     "defaultValue": true
-  },
-  {
-    "type": "separator",
-    "label": "**Advanced**"
-  },
-  {
-    "property": "mod.dia-sidebar.prompt",
-    "label": "Summarize instruction",
-    "type": "string",
-    "defaultValue": "Summarize this page into concise bullet points."
-  },
-  {
-    "property": "mod.dia-sidebar.maxchars",
-    "label": "Page text limit (characters)",
-    "type": "string",
-    "defaultValue": "",
-    "placeholder": "Blank = automatic"
   }
 ]
