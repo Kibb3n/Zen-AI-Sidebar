@@ -70,7 +70,7 @@ on the provider:
 
 ## AI backends (Sine → this mod → settings)
 
-- **Apple Intelligence (default).** On-device via afm-server (default `http://127.0.0.1:11435/v1`, change it with *Server address*). No key. Long pages
+- **Apple Intelligence (default).** On-device via afm-server (default `http://127.0.0.1:11435/v1`, change it with *Server address*). If you enabled API-key protection in afm-server, enter that key in the mod's *API key* setting; requests use `Authorization: Bearer`. Long pages
   are condensed to fit its small context.
 - **Anthropic (Claude).** Needs an API key. Supports PDFs, images, extended thinking and built-in web search.
 - **Google Gemini.** Needs an API key from Google AI Studio. Leave *Model* blank to always use the **newest

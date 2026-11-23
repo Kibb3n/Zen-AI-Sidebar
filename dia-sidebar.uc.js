@@ -14,7 +14,7 @@
   const SEL_MSG = "dia-sidebar:selection";
   const MAX_CHARS = 24000;
   const MAX_REFS = 12;
-  const VERSION = "2.0.0";
+  const VERSION = "2.0.1";
   const DEFAULT_PROMPT = "Summarize this page into concise bullet points.";
   const SYSTEM =
     "You are an AI assistant living in a sidebar next to the web page the user is viewing. " +
@@ -159,7 +159,7 @@
   .dia-head .dia-icon .dia-svg { width: 20px; height: 20px; }
   .dia-head .dia-layout { width: auto; padding: 0 6px 0 8px; display: inline-flex; align-items: center; gap: 1px; }
   .dia-head .dia-layout .dia-svg:last-child { width: 13px; height: 13px; }
-  .dia-hmenu { top: 54px; right: 12px; left: auto; bottom: auto; width: 232px; }
+  .dia-hmenu { top: 54px; right: 12px; left: auto; bottom: auto; width: 280px; max-width: calc(100% - 24px); max-height: min(360px, calc(100% - 64px)); overflow-y: auto; overscroll-behavior: contain; }
 
   /* conversation */
   .dia-log { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--soft2) transparent; display: flex; flex-direction: column; gap: 22px; padding: 10px 18px 18px; }
@@ -326,6 +326,7 @@
   .dia-menu { position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; z-index: 10; max-height: 300px; overflow-y: auto; scrollbar-width: thin; padding: 5px; background: var(--pop); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 14px 38px rgba(0, 0, 0, 0.28); animation: dia-in 0.2s var(--ease) both; }
   .dia-menu-sep { font-size: 11px; color: var(--mute); padding: 8px 10px 3px; letter-spacing: 0.02em; }
   .dia-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; text-align: start; appearance: none; border: 0; cursor: pointer; background: transparent; padding: 7px 10px; border-radius: 9px; font-size: 13px; }
+  .dia-hmenu .dia-menu-item { padding: 9px 12px; font-size: 14px; }
   .dia-menu-item:hover, .dia-menu-item.dia-active { background: var(--soft); }
   .dia-menu-item > .dia-svg { color: var(--mute); }
   .dia-menu-item img.dia-menu-ico { width: 16px; height: 16px; border-radius: 4px; flex: none; }
@@ -333,13 +334,13 @@
   .dia-menu-sub { color: var(--mute); font-size: 11.5px; white-space: nowrap; }
 
   /* history / skills sheet */
-  .dia-sheet { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; background: var(--panel); background-attachment: fixed; border-radius: inherit; animation: dia-in 0.25s var(--ease) both; }
+  .dia-sheet { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--panel); background-attachment: fixed; border-radius: inherit; animation: dia-in 0.25s var(--ease) both; }
   .dia-sheet-head { display: flex; align-items: center; gap: 6px; padding: 12px 10px 6px 18px; font-weight: 600; font-size: 13px; }
   .dia-sheet-head span { flex: 1; }
-  .dia-sheet-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+  .dia-sheet-body { flex: 1 1 0%; height: 0; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: auto; padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 2px; }
   .dia-search { display: flex; align-items: center; gap: 8px; margin: 2px 12px 8px; padding: 7px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); color: var(--mute); }
   .dia-search input { flex: 1; min-width: 0; border: 0 !important; outline: 0 !important; background: transparent !important; color: var(--fg); font: inherit; padding: 0 !important; }
-  .dia-row-item { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 10px; border-radius: 12px; cursor: pointer; }
+  .dia-row-item { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 10px; border-radius: 12px; cursor: pointer; }
   .dia-row-item:hover { background: var(--soft); }
   .dia-row-main { flex: 1; min-width: 0; }
   .dia-row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -990,11 +991,9 @@
       (status === 401 || status === 403 ? " (check the API key / access settings of your AI server)" : "");
   };
 
-  // afm-server documents Bearer auth, but its Xcode setup uses x-api-key, so send both
+  // AFM Server's OpenAI-compatible endpoint uses the standard Bearer token header.
   const authHeaders = () =>
-    apiKey()
-      ? { authorization: `Bearer ${apiKey()}`, ...(provider() === "apple" ? { "x-api-key": apiKey() } : {}) }
-      : {};
+    apiKey() ? { authorization: `Bearer ${apiKey()}` } : {};
 
   async function* fetchChunks(url, headers, body, signal) {
     const res = await fetch(url, { method: "POST", signal, headers, body });

@@ -30,18 +30,10 @@
   },
   {
     "property": "mod.dia-sidebar.apikey",
-    "label": "API key",
+    "label": "API key (AFM server key, if enabled)",
     "type": "string",
     "defaultValue": "",
-    "placeholder": "Paste your key here",
-    "conditions": [
-      {
-        "not": {
-          "property": "mod.dia-sidebar.provider",
-          "value": "apple"
-        }
-      }
-    ]
+    "placeholder": "Required for cloud providers; optional for a local server"
   },
   {
     "property": "mod.dia-sidebar.model",

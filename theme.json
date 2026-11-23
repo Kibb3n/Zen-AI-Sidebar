@@ -1,7 +1,7 @@
 {
   "id": "dia-sidebar",
   "name": "Dia Sidebar",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "A Dia-style AI chat sidebar for Zen. A real docked sidebar that matches your space's colours, with drag-and-drop files and tabs, web search (Gemini, Claude, or any model), Skills (/), @-mentions, history and YouTube key moments. Press ⌘E/Ctrl+E or use the chat button in the URL bar.",
   "author": "you",
   "homepage": "https://github.com/YOUR_USERNAME/dia-sidebar",
