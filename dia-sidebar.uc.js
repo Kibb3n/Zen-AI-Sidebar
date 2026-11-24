@@ -14,7 +14,7 @@
   const SEL_MSG = "dia-sidebar:selection";
   const MAX_CHARS = 24000;
   const MAX_REFS = 12;
-  const VERSION = "2.1.0";
+  const VERSION = "2.2.0";
   const DEFAULT_PROMPT = "Summarize this page into concise bullet points.";
   const SYSTEM =
     "You are an AI assistant living in a sidebar next to the web page the user is viewing. " +
@@ -379,6 +379,25 @@
   .dia-form label.dia-check input { margin-top: 1px; }
   .dia-found { display: flex; flex-wrap: wrap; gap: 6px; }
   .dia-found:empty, .dia-form .dia-note:empty { display: none; }
+  .dia-eff { padding: 8px 10px 6px; }
+  .dia-eff-top { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .dia-eff-val { color: var(--accent); }
+  .dia-eff-range { display: block; width: 100%; margin: 0; padding: 0; accent-color: var(--accent); cursor: pointer; }
+  .dia-eff-ticks { display: flex; justify-content: space-between; margin-top: 3px; font-size: 11px; color: var(--mute); }
+  .dia-eff-hint { margin-top: 6px; min-height: 2.8em; font-size: 12px; line-height: 1.4; color: var(--mute); }
+  .dia-onb { gap: 12px; }
+  .dia-onb-hero { margin: 4px 2px 0; font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
+  .dia-onb-sub { margin: 0 2px; font-size: 13px; line-height: 1.5; color: var(--mute); }
+  .dia-onb-list { display: grid; gap: 10px; margin: 4px 2px; padding: 0; list-style: none; font-size: 13.5px; line-height: 1.45; }
+  .dia-onb-card { appearance: none; display: flex; flex-direction: column; gap: 3px; width: 100%; box-sizing: border-box; padding: 12px 14px; text-align: start; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: inherit; font: inherit; cursor: pointer; transition: background-color 0.15s, border-color 0.15s; }
+  .dia-onb-card:hover { background: var(--soft); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+  .dia-onb-card b { font-size: 14px; }
+  .dia-onb-card span { font-size: 12.5px; line-height: 1.4; color: var(--mute); }
+  .dia-onb-steps { display: flex; justify-content: center; gap: 5px; }
+  .dia-onb-steps i { width: 6px; height: 6px; border-radius: 50%; background: var(--soft2); }
+  .dia-onb-steps i.on { background: var(--accent); }
+  .dia-seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .dia-seg .dia-chip.on { background: var(--accent); color: var(--on-accent); }
   .dia-found .dia-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
 }
 
@@ -407,11 +426,19 @@
 #dia-sidebar-urlbar:hover .urlbar-icon, #dia-sidebar-urlbar[open] .urlbar-icon { opacity: 1; }
 /* while the sidebar is open: a neutral highlight behind the (still white) icon */
 #dia-sidebar-urlbar[open] { background-color: color-mix(in srgb, var(--toolbar-color, currentColor) 14%, transparent); border-radius: var(--urlbar-icon-border-radius, 6px); }
+#dia-sidebar-urlbar[disabled] .urlbar-icon { opacity: 0.3 !important; }
+#dia-sidebar-urlbar[nudge] { animation: dia-nudge 0.35s; }
+@keyframes dia-nudge { 20%, 60% { transform: translateX(-2px); } 40%, 80% { transform: translateX(2px); } }
 @media (prefers-reduced-motion: reduce) {
   #dia-dock, #dia-dock * { animation-duration: 1ms !important; animation-delay: 0s !important; transition-duration: 1ms !important; }
 }
 `;
 
+  // A "page" is a real web page in the tab. A new tab, a blank tab or a browser-internal page isn't one, and the
+  // sidebar can't be opened there.
+  const tabHasPage = (t) => {
+    try { return /^https?$/.test(t?.linkedBrowser?.currentURI?.scheme || "") && !t.hasAttribute?.("zen-empty-tab"); } catch { return false; }
+  };
   const IS_MAC = navigator.platform.startsWith("Mac");
   const SHORTCUT = IS_MAC ? "⌘E" : "Ctrl+E";
   const isToggleKey = (e) =>
@@ -446,7 +473,9 @@
   const allModels = () => [builtinModel(), ...store.models().map((m) => ({ ...m, base: normBase(m.base) }))];
   const activeModel = () => { const id = pref("activemodel", "apple"); return allModels().find((m) => m.id === id) || builtinModel(); };
   // "apple" = the small-context prompt layout (one flattened turn, tight caps); "openai" = normal multi-turn chat
-  const provider = () => (activeModel().small ? "apple" : "openai");
+  const provider = () => (activeModel().type === "gemini" ? "gemini" : activeModel().small ? "apple" : "openai");
+  const geminiLabel = (id) => ({ flash: "Newest Flash (fast)", pro: "Newest Pro (smartest)", "flash-lite": "Newest Flash-Lite (cheapest)" })[id] || id;
+  const modelSub = (m) => m.builtin ? `${m.model} · on this Mac` : m.type === "gemini" ? `${geminiLabel(m.model)} · Google` : `${m.model} · ${hostOf(m.base) || m.base}`;
   const apiKey = () => (activeModel().key || "").trim();
   const baseUrl = () => activeModel().base;
   const model = () => activeModel().model;
@@ -457,13 +486,20 @@
   const isLocal = () => provider() === "apple" || LOCAL_RE.test(baseUrl());
   const llmReady = () => isNative() ? !!apiKey() : provider() === "apple" || !!apiKey() || isLocal();
   // Keep page text small for Apple's fixed 4,096-token on-device context window.
-  const chunkSize = () => (provider() === "apple" ? 4200 : 16000); // small models: leave room inside a 4,096-token window for the prompt and answer
-  const thinkBudget = () => (isNative() ? parseInt(pref("thinking", "0"), 10) || 0 : 0);
+  // small on-device model: leave room inside a 4,096-token window; Gemini can take the whole page
+  const chunkSize = () => (isNative() ? MAX_CHARS * 2 : provider() === "apple" ? 4200 : 16000);
+  // ---------- effort ----------
+  // The slider in the sidebar's model menu. Higher effort = fuller answers and more work per answer: thinking for
+  // models that support it and, for the small on-device model, a multi-step read of the whole page.
+  const effort = () => Math.min(4, Math.max(1, parseInt(pref("effort", "2"), 10) || 2));
+  const EFFORT_NAMES = ["Low", "Medium", "High", "Max"];
+  const thinkBudget = () => (isNative() ? [0, 1024, 8192, 24576][effort() - 1] : 0);
+  const reasoningEffort = () => ["low", "medium", "high", "high"][effort() - 1];
   // "auto" (default, like Dia): the assistant searches the web by itself whenever the question needs it.
   // "manual": only when you turn the globe on / use @Web. "off": never.
   const webMode = () => {
-    const v = pref("websearch", "manual");
-    return v === "default" || v === "auto" ? "manual" : v;
+    const v = pref("search", "auto");
+    return v === "manual" || v === "off" ? v : "auto";
   };
   // if Anthropic/Gemini reject their built-in search tool (plan, region, model), we search from the browser instead
   const searchBroken = new Set(); // providers whose built-in search tool was refused (remembered per provider)
@@ -474,13 +510,15 @@
   const keepHistory = () => bool("history", pref("savehistory", "true") !== "false");
   // Brave API key or SearXNG address (one field; older per-engine fields still work)
   const searchSetup = (eng) => pref("searchsetup", "").trim() || (eng === "brave" ? pref("searchkey", "") : pref("searxurl", "")).trim();
-  const STYLES = {
-    balanced: "Give balanced answers: clear and complete without padding (this overrides the instruction to be brief).",
-    detailed: "Give thorough, well-structured answers with the relevant detail and context (this overrides the instruction to be brief).",
-  };
+  const STYLES = [
+    "", // Low: the base prompt is already brief
+    "Give balanced answers: clear and complete without padding (this overrides the instruction to be brief).",
+    "Give thorough, well-structured answers with the relevant detail and context (this overrides the instruction to be brief).",
+    "Give thorough, well-structured answers with the relevant detail and context (this overrides the instruction to be brief). Work through the question carefully and check your answer against the page and any sources before you reply.",
+  ];
   const systemPrompt = () => {
     let s = SYSTEM;
-    const style = STYLES[pref("style", "concise")];
+    const style = STYLES[effort() - 1];
     if (style) s += "\n\n" + style;
     const lang = pref("language", "").trim();
     if (lang) s += `\n\nAlways reply in ${lang}, whatever language the page or the question is in.`;
@@ -1320,7 +1358,7 @@
   const geminiAuto = {};
   const geminiVer = (n) => parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)-/) || [])[1] || "0");
   async function geminiCandidates(signal) {
-    const want = (pref("model", "") || "flash").trim().replace(/^models\//, "");
+    const want = (activeModel().model || "flash").trim().replace(/^models\//, "");
     if (/^gemini-/.test(want)) return [want];
     const kind = /^(flash-lite|pro)$/.test(want) ? want : "flash";
     if (geminiAuto[kind]) return geminiAuto[kind];
@@ -1343,6 +1381,16 @@
     } else geminiAuto[kind] = list; // only cache a real answer from the API
     return list;
   }
+  // the models this key can chat with, newest first (also proves the key works)
+  async function geminiList(key) {
+    const r = await fetchText(`${GEMINI_BASE}/models?pageSize=200`, { headers: { "x-goog-api-key": key } }, 9000);
+    if (!r.ok) throw new Error(httpError(r.status, r.text));
+    return (JSON.parse(r.text).models || [])
+      .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
+      .map((m) => String(m.name).replace(/^models\//, ""))
+      .filter((n) => /^gemini-/.test(n) && !/(embedding|tts|image|live|audio|robotics|computer)/.test(n))
+      .sort((x, y) => geminiVer(y) - geminiVer(x) || x.localeCompare(y));
+  }
   async function* geminiStream(req, system, signal) {
     const headers = { "content-type": "application/json", "x-goog-api-key": apiKey() };
     const contents = [];
@@ -1352,7 +1400,7 @@
       if (contents.at(-1)?.role === role) contents.at(-1).parts.push(...parts);
       else contents.push({ role, parts: [...parts] });
     }
-    const tb = thinkBudget();
+    const tb = req.quick ? 0 : thinkBudget();
     const cands = await geminiCandidates(signal);
     let lastErr = null;
     for (let ci = 0; ci < cands.length; ci++) {
@@ -1363,7 +1411,7 @@
         if (req.web) body.tools = [{ google_search: {} }];
         if (useThink) {
           // Gemini 2.x takes a token budget, 3.x a level (never both). Without a setting, 3.x gets "low" so chat stays fast.
-          if (tb) body.generationConfig.thinkingConfig = /gemini-2\./.test(mid) ? { thinkingBudget: tb, includeThoughts: true } : { thinkingLevel: tb <= 2048 ? "low" : "high", includeThoughts: true };
+          if (tb) body.generationConfig.thinkingConfig = /gemini-2\./.test(mid) ? { thinkingBudget: tb, includeThoughts: true } : { thinkingLevel: tb <= 1024 ? "low" : tb <= 8192 ? "medium" : "high", includeThoughts: true };
           else if (/gemini-(3|4)/.test(mid)) body.generationConfig.thinkingConfig = { thinkingLevel: "low" };
         }
         let got = false, gotText = false;
@@ -1421,6 +1469,7 @@
       url = baseUrl() + "/chat/completions";
       headers = { "content-type": "application/json", ...authHeaders() };
       body = { model: model(), stream: true, messages: [{ role: "system", content: system + (req.pageBlock ? "\n\n" + req.pageBlock : "") }, ...req.messages] };
+      if (activeModel().reasoning) body.reasoning_effort = req.quick ? "low" : reasoningEffort(); // the Effort slider, for models that take it
     }
     let sawTool = false, toolIdx = -1, toolBuf = "";
     const results = [], cited = [];
@@ -1457,9 +1506,9 @@
   }
 
   // one non-streaming helper (used by the Skill builder)
-  async function askOnce(system, text, signal) {
+  async function askOnce(system, text, signal, quick) {
     let acc = "";
-    for await (const ev of streamLLM({ system, pageBlock: "", messages: [{ role: "user", content: text }], web: false }, signal)) if (ev.t === "text") acc += ev.d;
+    for await (const ev of streamLLM({ system, pageBlock: "", messages: [{ role: "user", content: text }], web: false, quick: !!quick }, signal)) if (ev.t === "text") acc += ev.d;
     return acc;
   }
 
@@ -1535,7 +1584,7 @@
       }
     }
     results = results.filter((r) => /^https?:\/\//.test(r.url)).slice(0, 6);
-    if (!results.length) throw new Error(eng === "duckduckgo" ? "DuckDuckGo gave no results (it may be rate-limiting). Brave or SearXNG can be set in the mod's settings." : "The search returned no results");
+    if (!results.length) throw new Error("DuckDuckGo gave no results (it may be rate-limiting). Try again in a moment.");
     return results;
   }
   async function readSources(results, signal, cap) {
@@ -1550,6 +1599,49 @@
     `=== WEB SEARCH RESULTS for "${q}" ===\n` +
     results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${(r.text || r.snippet || "").slice(0, cap)}`).join("\n\n") +
     "\n\nUse these results for facts beyond the page. Cite sources inline as [1], [2] right after the claims they support. Never cite a source that isn't listed.";
+  // ----- higher effort on the small on-device model -----
+  // Its 4,096-token window can't hold a long page, so High reads the whole page in parts and keeps notes that matter
+  // for the question; Max also drafts an answer and then refines it.
+  const NOTES_SYSTEM =
+    "You are reading one excerpt of a longer web page for a reader who has a specific request. Write short plain-text notes (at most 80 words) " +
+    "with the facts, figures, names, dates, claims and quotes in this excerpt that matter for the request. No preamble. If the excerpt has nothing relevant, reply exactly NONE.";
+  function splitForReading(text, size) {
+    const out = [];
+    let cur = "";
+    for (const para of String(text).split(/\n+/)) {
+      if (cur && cur.length + para.length + 1 > size) { out.push(cur); cur = ""; }
+      if (para.length > size) { for (let i = 0; i < para.length; i += size) out.push(para.slice(i, i + size)); continue; }
+      cur += (cur ? "\n" : "") + para;
+    }
+    if (cur) out.push(cur);
+    return out;
+  }
+  async function deepRead(question, text, signal, tick) {
+    const size = 4200, cap = effort() >= 4 ? 12 : 7;
+    let parts = splitForReading(text, size);
+    if (parts.length > cap) parts = Array.from({ length: cap }, (_, i) => parts[Math.round((i * (parts.length - 1)) / (cap - 1))]); // keep the start and end, sample the middle evenly
+    const notes = [];
+    for (let i = 0; i < parts.length; i++) {
+      tick?.(i + 1, parts.length);
+      try {
+        const out = (await askOnce(NOTES_SYSTEM, `Request: ${String(question).slice(0, 300)}\n\nExcerpt ${i + 1} of ${parts.length}:\n${parts[i]}`, signal, true)).trim();
+        if (out && !/^NONE\b/i.test(out)) notes.push(out.replace(/\s+/g, " ").slice(0, 520));
+      } catch (e) { if (e.name === "AbortError") throw e; }
+    }
+    return notes.map((n) => "• " + n).join("\n");
+  }
+  async function refineRequest(req, signal, setStatus) {
+    try {
+      setStatus("Drafting an answer…");
+      const draft = (await askOnce(req.system, req.messages[0].content, signal)).trim();
+      if (!draft) return req;
+      setStatus("Refining…");
+      const c = req.messages[0].content, i = c.lastIndexOf("=== REQUEST ===");
+      const src = i > 0 ? c.slice(0, i) : "", ask = i >= 0 ? c.slice(i) : c;
+      const cut = (t, n) => (t.length <= n ? t : t.slice(0, n - 1) + "…");
+      return { ...req, messages: [{ role: "user", content: `${cut(src, 4800)}\n\n=== DRAFT ANSWER ===\n${cut(draft, 2400)}\n\n${cut(ask, 1200)}\n\nImprove the draft answer above: fix anything the sources contradict, add important points it missed, and tighten the wording. Reply with only the improved answer.` }] };
+    } catch (e) { if (e.name === "AbortError") throw e; return req; }
+  }
   // asks the model whether to search; returns the query, or "" for no search
   async function planSearch(convo, page, forced, signal) {
     const last = [...convo].reverse().find((m) => m.role === "user");
@@ -1557,7 +1649,7 @@
     const recent = convo.slice(-5, -1).map((m) => `${m.role}: ${(m.label || m.content || "").slice(0, 200)}`).join("\n");
     const ctx = `Today is ${new Date().toDateString()}.\n` + (page?.title ? `Page: ${page.title}\n` : "") + (recent ? `Recent chat:\n${recent}\n` : "") + `User message: ${msg}`;
     let out = "";
-    try { out = await askOnce(forced ? ROUTER_FORCED : ROUTER_SYSTEM, ctx, signal); } catch (e) { if (e.name === "AbortError") throw e; }
+    try { out = await askOnce(forced ? ROUTER_FORCED : ROUTER_SYSTEM, ctx, signal, true); } catch (e) { if (e.name === "AbortError") throw e; }
     const m = out.match(/SEARCH:\s*(.+)/i);
     const q = (m?.[1] || "").trim().replace(/^["“'`]+|["”'`.]+$/g, "").slice(0, 200);
     if (q) return q;
@@ -2308,6 +2400,13 @@
     function pickSkill(s) { skill = s; renderPills(); focusInput(); }
 
     // ----- request building -----
+    // the page text fitted to the model in use (cached per size, so switching models mid-chat re-fits it)
+    function pageCtx() {
+      const size = chunkSize();
+      if (page.text.length <= size) return page.text;
+      page.ctx = page.ctx || {};
+      try { return (page.ctx[size] ??= condense(page.text, size)); } catch { return page.text.slice(0, size); }
+    }
     const refHead = (r) =>
       r.kind === "tab" ? `ANOTHER TAB THE USER ATTACHED (${r.label || "tab"})`
       : r.kind === "clip" ? "TEXT THE USER PASTED IN"
@@ -2331,10 +2430,10 @@
     }
     // Every request is rebuilt from scratch. Cloud/large models get the page in the system prompt plus
     // real multi-turn history. Apple's tiny on-device model ignores history, so it gets one flattened turn.
-    function buildRequest(resuming, webCtx) {
+    function buildRequest(resuming, webCtx, deep) {
       const lastU = [...convo].reverse().find((m) => m.role === "user");
       const req = lastU?.content || pref("prompt", DEFAULT_PROMPT);
-      let ctx = page && !page.none ? (page.context ?? page.text.slice(0, chunkSize())) : "";
+      let ctx = page && !page.none ? pageCtx() : "";
       // On YouTube every transcript line is prefixed with its [mm:ss] stamp (so "Key moments" can cite
       // times). For anything not about timing, strip them so the model doesn't echo them.
       if (page?.youtube && !/\btimestamp|\bmoment|\bchapter|time ?code|mm:ss|\bjump to\b/i.test(req)) {
@@ -2345,13 +2444,14 @@
         const upto = resuming ? convo : convo.slice(0, convo.lastIndexOf(lastU));
         const transcript = upto.slice(-2).map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${(m.label || m.content).slice(0, 500)}`).join("\n");
         const fit = (text, limit) => text.length <= limit ? text : text.slice(0, limit - 44) + "\n[…context shortened for the on-device model]";
-        const pageContext = fit(pageBlock, webCtx ? 3000 : 4200);
+        const budget = webCtx ? 3000 : 4200;
+        const pageContext = deep ? fit(`=== PAGE THE USER IS VIEWING (notes from reading all of it) ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${deep}`, budget) : fit(pageBlock, budget);
         const webContext = webCtx ? fit(webCtx.text, 1800) : "";
         const ask = resuming ? "Continue your previous answer exactly where it stopped, without repeating it." : userText(lastU || { content: req }, true);
         return {
           system: systemPrompt(), pageBlock: "", web: false,
           messages: [{ role: "user", content:
-            (pageContext ? "Use the web page below to respond to the user's request. Be concise.\n\n" + pageContext + "\n\n" : "") +
+            (pageContext ? "Use the web page below to respond to the user's request." + (effort() <= 2 ? " Be concise." : "") + "\n\n" + pageContext + "\n\n" : "") +
             (webContext ? webContext + "\n\n" : "") +
             (transcript ? `=== CONVERSATION SO FAR ===\n${transcript}\n\n` : "") + `=== REQUEST ===\n${ask}` }],
         };
@@ -2609,7 +2709,11 @@
           const heur = webMode() === "auto" && !lastU?.fromSkill && needsWeb(lastU?.label || lastU?.content || "");
           // Search from the browser (for models without a built-in tool, or when that tool was rejected):
           // the model writes a query, we search, read the top pages and hand them back as numbered sources.
+          // questions that are plainly about the page itself never need a search, so skip the extra routing call
+          const askText = lastU?.label || lastU?.content || "";
+          const skipRouter = !lastU?.web && !heur && (askText.trim().length < 6 || ABOUT_PAGE.test(askText));
           const runFallback = async () => {
+            if (skipRouter) return;
             try {
               const q = await planSearch(convo, page, !!lastU?.web || heur, signal);
               if (q) {
@@ -2630,9 +2734,18 @@
           };
           const wantsSearch = !prior && webMode() !== "off" && (lastU?.web || (webMode() === "auto" && !lastU?.fromSkill));
           if (wantsSearch && (!isNative() || searchBroken.has(provider()))) await runFallback();
+          // High effort on the small on-device model: read the whole page in parts, keep notes for this question
+          let deep = null;
+          if (provider() === "apple" && effort() >= 3 && !prior && page && !page.none && page.text.length > chunkSize() * 1.3) {
+            try { deep = (await deepRead(lastU?.content || pref("prompt", DEFAULT_PROMPT), page.text, signal, (i, n) => setStatus(`Reading the page in parts (${i}/${n})…`))) || null; }
+            catch (e) { if (e.name === "AbortError") throw e; deep = null; }
+            clearStatus();
+          }
           for (let attempt = 0; ; attempt++) {
             try {
-              for await (const ev of streamLLM(buildRequest(!!prior, webCtx), signal)) {
+              let reqNow = buildRequest(!!prior, webCtx, deep);
+              if (provider() === "apple" && effort() >= 4 && !prior) reqNow = await refineRequest(reqNow, signal, setStatus); // Max: draft first, then stream the improved answer
+              for await (const ev of streamLLM(reqNow, signal)) {
                 if (ev.t === "think") { onThink(ev.d); continue; }
                 if (ev.t === "status") { setStatus(ev.d); continue; }
                 if (ev.t === "query") { qset.add(ev.d); continue; }
@@ -2756,7 +2869,7 @@
       try {
         const size = chunkSize();
         if (page.text.length > size) status.textContent = "Condensing…";
-        page.context = page.text.length <= size ? page.text : condense(page.text, size);
+        page.context = pageCtx();
       } catch (e) { page.context = page.text.slice(0, chunkSize()); }
       status.remove();
       convo.push(entry);
@@ -2849,7 +2962,11 @@
     }
 
     // ----- sheets (history, skills) laid over the conversation -----
-    function closeSheet() { sheetEl?.remove(); sheetEl = null; panel?.classList.remove("dia-sheeted"); }
+    function closeSheet() {
+      const wasSetup = sheetEl?.dataset.onb; // leaving the setup guide any way counts as done
+      sheetEl?.remove(); sheetEl = null; panel?.classList.remove("dia-sheeted");
+      if (wasSetup) { try { Services.prefs.setBoolPref(PREF + "setupdone", true); } catch {} }
+    }
     function openSheet(title, ...body) {
       closeSheet(); closeHMenu();
       sheetEl = h("div", { className: "dia-sheet" },
@@ -2936,8 +3053,8 @@
     // Dia shows nothing in an empty chat: no greeting, no suggestions. Skills live behind / and the header menu.
     function renderEmpty() {}
 
-    // The header buttons open small dropdowns: the layout button (History, Skills) and the model picker.
-    // History, Skills and the model manager then open as full-size sheets (they have lists to scroll).
+    // The header buttons open small dropdowns: the layout button (History, Skills) and the model picker (models + the
+    // effort slider). History, Skills, the model manager and the setup guide open as full-size sheets (they have lists to scroll).
     const onHMenuDown = (e) => { if (hmenuEl && !hmenuEl.contains(e.target) && !e.target.closest?.(".dia-layout, .dia-modelbtn")) closeHMenu(); };
     function closeHMenu() {
       if (!hmenuEl) return;
@@ -2965,14 +3082,41 @@
         menuChoice("history", "Chat history", "Search, reopen, or delete saved chats", () => openHistory()),
         menuChoice("spark", "Skills", "Choose or edit saved prompts", () => openSkills()));
     }
+
+    // ----- effort slider: how much work the model puts into an answer -----
+    const effortHint = (v) => {
+      const base = ["Quick, short answers.", "Balanced answers.", "Thorough answers.", "The most careful answers."][v - 1];
+      const p = provider();
+      const extra = p === "apple" ? ["", "", " Reads the whole page in parts first, so it takes longer.", " Reads the whole page, drafts an answer, then refines it. Slowest."][v - 1]
+        : p === "gemini" || activeModel().reasoning ? ["", " Thinks a little.", " Thinks harder.", " Thinks the longest."][v - 1] : "";
+      return base + extra;
+    };
+    function effortControl() {
+      const val = h("span", { className: "dia-eff-val" });
+      const hint = h("div", { className: "dia-eff-hint" });
+      const slider = h("input", { className: "dia-eff-range", type: "range", min: "1", max: "4", step: "1", value: String(effort()) });
+      const paint = () => { const v = +slider.value; val.textContent = EFFORT_NAMES[v - 1]; hint.textContent = effortHint(v); };
+      slider.addEventListener("input", paint); // the label follows the thumb…
+      slider.addEventListener("change", () => setPref("effort", slider.value)); // …and the setting is saved when you let go
+      paint();
+      return h("div", { className: "dia-eff" },
+        h("div", { className: "dia-eff-top" }, h("span", { textContent: "Effort" }), val),
+        slider,
+        h("div", { className: "dia-eff-ticks" }, ...EFFORT_NAMES.map((n) => h("span", { textContent: n }))),
+        hint);
+    }
+
+    // ----- model picker -----
     function openModelMenu() {
       if (hmenuKind === "models") { closeHMenu(); return; }
       closeHMenu();
       const cur = activeModel();
       showHMenu("models", ".dia-modelbtn", "dia-mmenu",
-        ...allModels().map((m) => menuChoice(m.id === cur.id ? "check" : null, m.name, `${m.model} · ${m.builtin ? "on this Mac" : hostOf(m.base) || m.base}`, () => pickModel(m), m.id === cur.id)),
+        ...allModels().map((m) => menuChoice(m.id === cur.id ? "check" : null, m.name, modelSub(m), () => pickModel(m), m.id === cur.id)),
         h("div", { className: "dia-menu-rule" }),
-        menuChoice("plus", "Add or manage models…", "Ollama, LM Studio, OpenRouter, OpenAI…", () => openModels()));
+        effortControl(),
+        h("div", { className: "dia-menu-rule" }),
+        menuChoice("plus", "Add or manage models…", "Gemini, Ollama, LM Studio, OpenRouter…", () => openModels()));
     }
     // the model applies to the next message; it is shared by every chat and window
     function pickModel(m) { setPref("activemodel", m.id); refreshModel(); focusInput(); }
@@ -2982,17 +3126,110 @@
       modelBtnEl.querySelector(".dia-modelname").textContent = m.name;
       modelBtnEl.title = `Model: ${m.name} (${m.model}). Click to switch.`;
     }
+    async function saveModel(entry) {
+      const cur = store.models();
+      const isNew = !cur.some((x) => x.id === entry.id);
+      await store.saveModels(isNew ? [...cur, entry] : cur.map((x) => (x.id === entry.id ? entry : x)));
+      if (isNew) setPref("activemodel", entry.id); // a model you just added is the one you want to try
+      refreshModel();
+    }
 
-    // ----- model manager sheet: add, edit, delete OpenAI-compatible models -----
-    function openModels(startNew) {
+    // ----- model forms (used by the model manager and the setup guide) -----
+    // Gemini: just a key. The newest Flash/Pro is picked for you (or choose an exact model after checking the key).
+    function renderGeminiForm(body, m, done, cancel) {
+      const key = h("input", { type: "password", value: m?.key || "", placeholder: "Paste your Gemini API key" });
+      const status = h("div", { className: "dia-note" });
+      const found = h("div", { className: "dia-found" });
+      const seg = h("div", { className: "dia-seg" });
+      let variant = m?.model || "flash";
+      const paintSeg = () => seg.replaceChildren(...[["flash", "Flash · fast"], ["pro", "Pro · smartest"], ["flash-lite", "Flash-Lite · cheapest"]].map(([v, l]) =>
+        h("button", { className: "dia-chip" + (variant === v ? " on" : ""), textContent: l, onclick: () => { variant = v; status.textContent = ""; paintSeg(); } })));
+      paintSeg();
+      const check = h("button", { className: "dia-btn", textContent: "Check key", onclick: async () => {
+        const k = key.value.trim();
+        if (!k) { key.focus(); status.textContent = "Paste your API key first."; return; }
+        check.disabled = true; status.textContent = "Checking…"; found.replaceChildren();
+        try {
+          const ids = await geminiList(k);
+          status.textContent = ids.length ? `Key works. ${ids.length} models available. Or tap an exact model:` : "Key works, but no chat models were listed.";
+          found.replaceChildren(...ids.slice(0, 40).map((id) => h("button", { className: "dia-chip", textContent: id, title: id, onclick: () => { variant = id; status.textContent = "Using " + id; paintSeg(); } })));
+        } catch (e) { status.textContent = "That key didn't work (" + String(e.message || e).slice(0, 120) + ")."; }
+        check.disabled = false;
+      } });
+      const save = h("button", { className: "dia-btn dia-primary", textContent: "Save", onclick: async () => {
+        const k = key.value.trim();
+        if (!k) { key.focus(); status.textContent = "Paste your API key first."; return; }
+        const nice = { flash: "Gemini Flash", pro: "Gemini Pro", "flash-lite": "Gemini Flash-Lite" }[variant] || variant;
+        const entry = { id: m?.id || "m" + Date.now().toString(36), type: "gemini", name: m?.name || nice, base: GEMINI_BASE, model: variant, key: k, small: false, vision: true };
+        await saveModel(entry);
+        done(entry);
+      } });
+      body.replaceChildren(h("div", { className: "dia-form" },
+        h("div", { className: "dia-onb-sub", textContent: "Get a free key in Google AI Studio, paste it here, and you're done. The newest model of the kind you pick is used automatically." }),
+        h("div", { className: "dia-edit-row" }, h("button", { className: "dia-btn", textContent: "Get a free key", onclick: () => openLink("https://aistudio.google.com/apikey") })),
+        h("label", { textContent: "API key" }), key,
+        h("label", { textContent: "Which kind" }), seg,
+        h("div", { className: "dia-edit-row" }, check), status, found,
+        h("div", { className: "dia-note", textContent: "Saved in your Firefox profile folder, not sent anywhere except to Google." }),
+        h("div", { className: "dia-edit-row" }, h("button", { className: "dia-btn", textContent: "Cancel", onclick: cancel }), save)));
+      key.focus();
+    }
+    // any other OpenAI-compatible server
+    function renderCustomForm(body, m, done, cancel) {
+      const name = h("input", { type: "text", value: m?.name || "", placeholder: "e.g. Llama 3.1 (Ollama)" });
+      const base = h("input", { type: "text", value: m?.base || "", placeholder: "http://localhost:11434/v1" });
+      const mid = h("input", { type: "text", value: m?.model || "", placeholder: "Model ID, e.g. llama3.1:8b" });
+      const key = h("input", { type: "password", value: m?.key || "", placeholder: "Only if the server needs one" });
+      const small = h("input", { type: "checkbox", checked: !!m?.small });
+      const vision = h("input", { type: "checkbox", checked: !!m?.vision });
+      const reasoning = h("input", { type: "checkbox", checked: !!m?.reasoning });
+      const status = h("div", { className: "dia-note" });
+      const found = h("div", { className: "dia-found" });
+      const find = h("button", { className: "dia-btn", textContent: "Find models", title: "Ask the server which models it offers", onclick: async () => {
+        const b = normBase(base.value);
+        if (!/^https?:\/\//i.test(b)) { base.focus(); status.textContent = "Enter the server address first (starting with http:// or https://)."; return; }
+        find.disabled = true; status.textContent = "Looking…"; found.replaceChildren();
+        try {
+          const k = key.value.trim();
+          const j = JSON.parse(await httpGet(b + "/models", k ? { authorization: `Bearer ${k}`, "x-api-key": k } : {}));
+          const ids = (Array.isArray(j) ? j : j.data || j.models || []).map((x) => (typeof x === "string" ? x : x.id || x.name || x.model)).filter(Boolean).slice(0, 80);
+          status.textContent = ids.length ? "Tap one to use it:" : "That server didn't list any models. Type the model ID yourself.";
+          found.replaceChildren(...ids.map((id) => h("button", { className: "dia-chip", textContent: id, title: id, onclick: () => { mid.value = id; if (!name.value.trim()) name.value = id; } })));
+        } catch (e) { status.textContent = "Couldn't list models from that server (" + String(e.message || e).slice(0, 120) + "). You can still type the model ID yourself."; }
+        find.disabled = false;
+      } });
+      const save = h("button", { className: "dia-btn dia-primary", textContent: "Save model", onclick: async () => {
+        const b = normBase(base.value), mi = mid.value.trim();
+        if (!/^https?:\/\//i.test(b)) { base.focus(); status.textContent = "The server address must start with http:// or https://."; return; }
+        if (!mi) { mid.focus(); status.textContent = "Enter the model ID (or use Find models)."; return; }
+        const entry = { id: m?.id || "m" + Date.now().toString(36), name: (name.value.trim() || mi).slice(0, 40), base: b, model: mi, key: key.value.trim(), small: small.checked, vision: vision.checked, reasoning: reasoning.checked };
+        await saveModel(entry);
+        done(entry);
+      } });
+      body.replaceChildren(h("div", { className: "dia-form" },
+        h("label", { textContent: "Name" }), name,
+        h("label", { textContent: "Server address (OpenAI-compatible)" }), base,
+        h("label", { textContent: "Model ID" }), mid,
+        h("div", { className: "dia-edit-row" }, find), status, found,
+        h("label", { textContent: "API key" }), key,
+        h("label", { className: "dia-check" }, small, h("span", { textContent: "Small context window (tick for on-device or local models limited to about 4K tokens)" })),
+        h("label", { className: "dia-check" }, vision, h("span", { textContent: "Can read images" })),
+        h("label", { className: "dia-check" }, reasoning, h("span", { textContent: "Reasoning model (sends the Effort setting to it)" })),
+        h("div", { className: "dia-note", textContent: "Saved in your Firefox profile folder, not sent anywhere except to this server." }),
+        h("div", { className: "dia-edit-row" }, h("button", { className: "dia-btn", textContent: "Cancel", onclick: cancel }), save)));
+      name.focus();
+    }
+
+    // ----- model manager sheet -----
+    function openModels() {
       const body = h("div", { className: "dia-sheet-body" });
       openSheet("Models", body);
       const row = (m) => h("div", { className: "dia-row-item", onclick: () => { closeSheet(); pickModel(m); } },
         h("div", { className: "dia-row-main" },
           h("div", { className: "dia-row-title", textContent: m.name + (m.id === activeModel().id ? "  ·  in use" : "") }),
-          h("div", { className: "dia-row-sub", textContent: `${m.model} · ${m.builtin ? "address and key are in the mod's settings" : hostOf(m.base) || m.base}` })),
+          h("div", { className: "dia-row-sub", textContent: m.builtin ? `${m.model} · address and key are under Advanced in the mod's settings` : modelSub(m) })),
         ...(m.builtin ? [] : [
-          h("button", { className: "dia-icon", title: "Edit", onclick: (e) => { e.stopPropagation(); form(m); } }, icon("edit")),
+          h("button", { className: "dia-icon", title: "Edit", onclick: (e) => { e.stopPropagation(); edit(m); } }, icon("edit")),
           h("button", { className: "dia-icon", title: "Delete", onclick: (e) => {
             e.stopPropagation();
             if (pref("activemodel", "apple") === m.id) setPref("activemodel", "apple");
@@ -3002,57 +3239,75 @@
       const paint = () => {
         const mine = allModels().filter((m) => !m.builtin);
         body.replaceChildren(
-          h("button", { className: "dia-btn", textContent: "＋ Add model", onclick: () => form(null) }),
+          h("div", { className: "dia-seg" },
+            h("button", { className: "dia-btn", textContent: "＋ Add Gemini", onclick: () => renderGeminiForm(body, null, paint, paint) }),
+            h("button", { className: "dia-btn", textContent: "＋ Add another model", onclick: () => renderCustomForm(body, null, paint, paint) })),
           h("div", { className: "dia-menu-sep", textContent: "Your models" }),
-          ...(mine.length ? mine.map(row) : [h("div", { className: "dia-note", textContent: "Nothing yet. Add any OpenAI-compatible server (Ollama, LM Studio, OpenRouter, OpenAI…), then switch between models from the top of the sidebar." })]),
+          ...(mine.length ? mine.map(row) : [h("div", { className: "dia-note", textContent: "Nothing yet. Add Gemini with just an API key, or any OpenAI-compatible server (Ollama, LM Studio, OpenRouter, OpenAI…). Then switch between models from the top of the sidebar." })]),
           h("div", { className: "dia-menu-sep", textContent: "Built in" }),
           row(builtinModel()));
       };
-      const form = (m) => {
-        const name = h("input", { type: "text", value: m?.name || "", placeholder: "e.g. Llama 3.1 (Ollama)" });
-        const base = h("input", { type: "text", value: m?.base || "", placeholder: "http://localhost:11434/v1" });
-        const mid = h("input", { type: "text", value: m?.model || "", placeholder: "Model ID, e.g. llama3.1:8b" });
-        const key = h("input", { type: "password", value: m?.key || "", placeholder: "Only if the server needs one" });
-        const small = h("input", { type: "checkbox", checked: !!m?.small });
-        const vision = h("input", { type: "checkbox", checked: !!m?.vision });
-        const status = h("div", { className: "dia-note" });
-        const found = h("div", { className: "dia-found" });
-        const find = h("button", { className: "dia-btn", textContent: "Find models", title: "Ask the server which models it offers", onclick: async () => {
-          const b = normBase(base.value);
-          if (!/^https?:\/\//i.test(b)) { base.focus(); status.textContent = "Enter the server address first (starting with http:// or https://)."; return; }
-          find.disabled = true; status.textContent = "Looking…"; found.replaceChildren();
-          try {
-            const k = key.value.trim();
-            const j = JSON.parse(await httpGet(b + "/models", k ? { authorization: `Bearer ${k}`, "x-api-key": k } : {}));
-            const ids = (Array.isArray(j) ? j : j.data || j.models || []).map((x) => (typeof x === "string" ? x : x.id || x.name || x.model)).filter(Boolean).slice(0, 80);
-            status.textContent = ids.length ? "Tap one to use it:" : "That server didn't list any models. Type the model ID yourself.";
-            found.replaceChildren(...ids.map((id) => h("button", { className: "dia-chip", textContent: id, title: id, onclick: () => { mid.value = id; if (!name.value.trim()) name.value = id; } })));
-          } catch (e) { status.textContent = "Couldn't list models from that server (" + String(e.message || e).slice(0, 120) + "). You can still type the model ID yourself."; }
-          find.disabled = false;
-        } });
-        const save = h("button", { className: "dia-btn dia-primary", textContent: "Save model", onclick: async () => {
-          const b = normBase(base.value), mi = mid.value.trim();
-          if (!/^https?:\/\//i.test(b)) { base.focus(); status.textContent = "The server address must start with http:// or https://."; return; }
-          if (!mi) { mid.focus(); status.textContent = "Enter the model ID (or use Find models)."; return; }
-          const entry = { id: m?.id || "m" + Date.now().toString(36), name: (name.value.trim() || mi).slice(0, 40), base: b, model: mi, key: key.value.trim(), small: small.checked, vision: vision.checked };
-          const cur = store.models();
-          await store.saveModels(cur.some((x) => x.id === entry.id) ? cur.map((x) => (x.id === entry.id ? entry : x)) : [...cur, entry]);
-          refreshModel();
-          paint();
-        } });
-        body.replaceChildren(h("div", { className: "dia-form" },
-          h("label", { textContent: "Name" }), name,
-          h("label", { textContent: "Server address (OpenAI-compatible)" }), base,
-          h("label", { textContent: "Model ID" }), mid,
-          h("div", { className: "dia-edit-row" }, find), status, found,
-          h("label", { textContent: "API key" }), key,
-          h("label", { className: "dia-check" }, small, h("span", { textContent: "Small context window (tick for on-device or local models limited to about 4K tokens)" })),
-          h("label", { className: "dia-check" }, vision, h("span", { textContent: "Can read images" })),
-          h("div", { className: "dia-note", textContent: "Saved in your Firefox profile folder, not sent anywhere except to this server." }),
-          h("div", { className: "dia-edit-row" }, h("button", { className: "dia-btn", textContent: "Cancel", onclick: paint }), save)));
-        name.focus();
+      const edit = (m) => (m.type === "gemini" ? renderGeminiForm : renderCustomForm)(body, m, paint, paint);
+      paint();
+    }
+
+    // ----- setup guide (first run, and "Run setup again" in the mod's settings) -----
+    function openOnboarding() {
+      const body = h("div", { className: "dia-sheet-body dia-onb" });
+      openSheet("Set up", body);
+      sheetEl.dataset.onb = "1";
+      const dots = (n) => h("div", { className: "dia-onb-steps" }, ...[0, 1, 2, 3].map((i) => h("i", { className: i === n ? "on" : "" })));
+      const hero = (t) => h("div", { className: "dia-onb-hero", textContent: t });
+      const sub = (t) => h("div", { className: "dia-onb-sub", textContent: t });
+      const btn = (label, fn, primary) => h("button", { className: "dia-btn" + (primary ? " dia-primary" : ""), textContent: label, onclick: fn });
+      const nav = (...b) => h("div", { className: "dia-edit-row" }, ...b);
+      const card = (title, text, fn) => h("button", { className: "dia-onb-card", onclick: fn }, h("b", { textContent: title }), h("span", { textContent: text }));
+      let pickStep, afmStep, prefsStep, doneStep;
+      const welcome = () => body.replaceChildren(dots(0), hero("Chat with any page"),
+        h("ul", { className: "dia-onb-list" }, ...[
+          "Ask about the page you're on, or drag in tabs, files and text for extra context.",
+          "Pick your AI: private on your Mac, or a cloud model like Gemini. Switch any time from the top of the sidebar.",
+          "It searches the web by itself when a question needs fresh information.",
+        ].map((t) => h("li", { textContent: t }))),
+        nav(btn("Skip", () => closeSheet()), btn("Get started", () => pickStep(), true)));
+      pickStep = () => body.replaceChildren(dots(1), hero("Choose your AI"), sub("You can add more later and switch between them."),
+        card("Apple Intelligence", "Private and free. Runs on this Mac through AFM Server.", () => afmStep()),
+        card("Google Gemini", "Fast and capable. Needs a free API key from Google AI Studio.", () => renderGeminiForm(body, null, () => pickStep(), () => pickStep())),
+        card("Something else", "Ollama, LM Studio, OpenRouter, OpenAI… any OpenAI-compatible server.", () => renderCustomForm(body, null, () => pickStep(), () => pickStep())),
+        ...(store.models().length ? [h("div", { className: "dia-note", textContent: "Added: " + store.models().map((m) => m.name).join(", ") })] : []),
+        nav(btn("Back", welcome), btn("Continue", () => prefsStep(), true)));
+      afmStep = () => {
+        const st = h("div", { className: "dia-note" });
+        const test = btn("Test connection", async () => {
+          test.disabled = true; st.textContent = "Checking…";
+          const b = builtinModel();
+          try { await httpGet(b.base + "/models", b.key ? { authorization: `Bearer ${b.key}`, "x-api-key": b.key } : {}); st.textContent = "Connected. AFM Server is running."; }
+          catch (e) { st.textContent = e instanceof TypeError ? `Couldn't reach AFM Server at ${b.base}. Start it, then test again.` : "AFM Server answered, so it's running."; }
+          test.disabled = false;
+        });
+        body.replaceChildren(dots(1), hero("Apple Intelligence"),
+          sub("It runs on your Mac through AFM Server, so nothing leaves your computer. Start AFM Server, then test the connection. If you changed its address or key, set them under Advanced in the mod's settings."),
+          nav(test), st,
+          nav(btn("Back", () => pickStep()), btn("Use Apple Intelligence", () => { setPref("activemodel", "apple"); refreshModel(); prefsStep(); }, true)));
       };
-      if (startNew === true) form(null); else paint();
+      prefsStep = () => {
+        const seg = h("div", { className: "dia-seg" });
+        const paint = () => seg.replaceChildren(...[["auto", "Automatic"], ["manual", "Only when I ask"], ["off", "Off"]].map(([v, l]) =>
+          h("button", { className: "dia-chip" + (webMode() === v ? " on" : ""), textContent: l, onclick: () => { setPref("search", v); paint(); } })));
+        paint();
+        body.replaceChildren(dots(2), hero("How should it work?"), effortControl(),
+          h("div", { className: "dia-eff-top" }, h("span", { textContent: "Web search" })), seg,
+          h("div", { className: "dia-note", textContent: "Automatic searches the web when a question needs fresh information." }),
+          nav(btn("Back", () => pickStep()), btn("Finish", () => doneStep(), true)));
+      };
+      doneStep = () => body.replaceChildren(dots(3), hero("You're all set"),
+        h("ul", { className: "dia-onb-list" }, ...[
+          `Press ${SHORTCUT} any time to show or hide the sidebar.`,
+          "Change the model or the effort from the pill at the top left.",
+          "Drag in tabs, files or selected text to add context.",
+        ].map((t) => h("li", { textContent: t }))),
+        nav(btn("Start chatting", () => { closeSheet(); focusInput(); }, true)));
+      welcome();
     }
 
     // keepSplit: re-attach the other split pane(s) as locked pills. open() passes false because it
@@ -3176,7 +3431,9 @@
       focusInput();
       const splitDone = attachSplitTabs(); // grab the other split pane(s), if any
       const mode = pref("autosummarize", "youtube"); // "true" = always, "youtube" = only on videos
-      if (srcUrl() && (mode === "true" || (mode === "youtube" && isVid()))) {
+      const needSetup = !bool("setupdone", false);
+      if (needSetup) setTimeout(() => { if (!closed && panel && !panel.hidden && !sheetEl) openOnboarding(); }, 300); // first run: the setup guide
+      if (!needSetup && srcUrl() && (mode === "true" || (mode === "youtube" && isVid()))) {
         const first = skillsFor(isVid())[0];
         splitDone.then(() => { if (!closed && !started && !busy) runSkill(first); });
       }
@@ -3185,7 +3442,7 @@
     // ----- visibility: the sidebar shows only while its tab (or a split sibling) is on screen -----
     function sync() {
       if (!panel || closed) return;
-      const want = !userHidden && isMember(gBrowser.selectedTab);
+      const want = !userHidden && isMember(gBrowser.selectedTab) && tabHasPage(gBrowser.selectedTab);
       const was = panel.hidden;
       panel.hidden = !want;
       if (want && was) { autosize(); if (wantFocus) focusInput(); }
@@ -3208,7 +3465,7 @@
     }
 
     self = {
-      open, sync, dismiss, restore, close, onNav, refreshAttach, refreshModel, addRef,
+      open, sync, dismiss, restore, close, onNav, refreshAttach, refreshModel, addRef, startOnboarding: () => openOnboarding(),
       has: (t) => isMember(t),
       get src() { return src; },
       get visible() { return !!panel && !panel.hidden; },
@@ -3231,6 +3488,7 @@
   // open (or reveal) the sidebar on the current tab; returns its session
   function ensureSession() {
     const tab = gBrowser.selectedTab;
+    if (!tabHasPage(tab)) return null; // no page, no sidebar
     let s = sessions.get(tab) || current();
     if (s) { if (!s.visible) s.restore(); return s; }
     s = makeSession(tab);
@@ -3241,8 +3499,11 @@
   function toggle() {
     if (stale()) return; // an older copy — the newest one handles the shortcut
     try {
-      const s = sessions.get(gBrowser.selectedTab) || current();
-      if (s) return s.visible ? s.dismiss() : s.restore(); // hidden chats come back as they were
+      const tab = gBrowser.selectedTab;
+      const s = sessions.get(tab) || current();
+      if (s && s.visible) return s.dismiss();
+      if (!tabHasPage(tab)) { nudgeButton(); return; } // new tab, blank or internal page: nothing to chat about
+      if (s) return s.restore(); // hidden chats come back as they were
       ensureSession();
     } catch (e) { console.error("[dia-sidebar] couldn't open the sidebar:", e); }
   }
@@ -3250,7 +3511,7 @@
   function askAbout(text) {
     if (stale() || !text) return;
     const s = ensureSession();
-    s.addRef(text.slice(0, 3000));
+    s?.addRef(text.slice(0, 3000));
   }
 
   const onKey = (e) => {
@@ -3260,7 +3521,18 @@
       if (!e.repeat) toggle(); // holding the shortcut auto-repeats — only act on the first press
     }
   };
-  const syncAll = () => { sessions.forEach((x) => x.sync()); updateDock(); };
+  const syncAll = () => { sessions.forEach((x) => x.sync()); syncButton(); updateDock(); }; // the button reflects "is there a page?" even before any sidebar exists
+  // "Run setup again" (Sine settings): forget the models you added and show the setup guide again
+  async function resetSetup() {
+    if (stale()) return;
+    try {
+      await store.saveModels([]);
+      setPref("activemodel", "apple");
+      Services.prefs.setBoolPref(PREF + "setupdone", false);
+      sessions.forEach((x) => x.refreshModel());
+      if (window === Services.wm.getMostRecentWindow("navigator:browser")) ensureSession()?.startOnboarding(); // shows at once when a page is open, else on the next open
+    } catch (e) { console.warn("[dia-sidebar] run setup again", e); }
+  }
   const onSelect = () => { syncAll(); setTimeout(syncAll, 120); setTimeout(syncAll, 450); };
   const onTabClose = (e) => sessions.get(e.target)?.close(true);
   const onResize = () => syncAll();
@@ -3271,7 +3543,7 @@
   gBrowser.tabContainer.addEventListener("TabSelect", onSelect);
   gBrowser.tabContainer.addEventListener("TabClose", onTabClose);
   // settings take effect immediately (side, text size, colours, search mode, URL bar button…)
-  const prefObserver = { observe() { try { syncAll(); sessions.forEach((s) => { s.refreshAttach(); s.refreshModel(); }); applyUrlbarPref(); } catch (e) { console.warn("[dia-sidebar] settings", e); } } };
+  const prefObserver = { observe(_s, _t, data) { try { if (data === PREF + "rerunsetup") { resetSetup(); return; } syncAll(); sessions.forEach((s) => { s.refreshAttach(); s.refreshModel(); }); applyUrlbarPref(); } catch (e) { console.warn("[dia-sidebar] settings", e); } } };
   try { Services.prefs.addObserver(PREF, prefObserver); } catch (e) { console.warn("[dia-sidebar] settings observer", e); }
   try { Services.prefs.addObserver("zen.tabs.vertical", prefObserver); } catch (e) { console.warn("[dia-sidebar] tab sidebar observer", e); } // follow the tab sidebar when it switches sides
 
@@ -3281,6 +3553,7 @@
         if (!webProgress.isTopLevel) return;
         const tab = gBrowser.getTabForBrowser(browser);
         sessions.get(tab)?.onNav(); // includes YouTube's in-page (same-document) video switches
+        if (tab === gBrowser.selectedTab) syncAll(); // leaving for a new tab / internal page hides the sidebar
       } catch (e) { console.warn("[dia-sidebar] location listener", e); }
     },
   };
@@ -3313,7 +3586,15 @@
   // Chat button inside the URL bar (Zen puts the URL bar at the top of the left sidebar). It also lights up
   // while the sidebar is open on this tab. If the URL bar can't be found, fall back to a toolbar button.
   let urlBtn = null, btnTimer = null;
-  function syncButton() { try { urlBtn?.toggleAttribute("open", !!current()?.visible); } catch (e) {} }
+  function syncButton() {
+    try {
+      urlBtn?.toggleAttribute("open", !!current()?.visible);
+      const ok = tabHasPage(gBrowser.selectedTab);
+      urlBtn?.toggleAttribute("disabled", !ok);
+      urlBtn?.setAttribute("tooltiptext", ok ? `Chat with this page (${SHORTCUT})` : "Open a web page to chat with it");
+    } catch (e) {}
+  }
+  function nudgeButton() { try { urlBtn?.setAttribute("nudge", ""); setTimeout(() => urlBtn?.removeAttribute("nudge"), 400); } catch {} }
   function mountUrlbarButton() {
     if (urlBtn?.isConnected) return true;
     const host = document.getElementById("page-action-buttons") || document.getElementById("urlbar-input-container");

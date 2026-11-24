@@ -1,40 +1,26 @@
 [
   {
     "type": "separator",
-    "label": "**Apple Intelligence (built in)**\n*Uses AFM Server with the fixed model apple.local. To add other models and switch between them, use the model menu at the top of the sidebar.*"
-  },
-  {
-    "property": "mod.dia-sidebar.server",
-    "label": "AFM Server URL",
-    "type": "string",
-    "defaultValue": "http://127.0.0.1:11435/v1",
-    "placeholder": "http://127.0.0.1:11435/v1"
-  },
-  {
-    "property": "mod.dia-sidebar.apikey",
-    "label": "AFM Server API key (only if enabled in AFM Server)",
-    "type": "string",
-    "defaultValue": "",
-    "placeholder": "Leave blank unless AFM Server requires a key"
-  },
-  {
-    "type": "separator",
     "label": "**Chat**"
   },
   {
-    "property": "mod.dia-sidebar.style",
-    "label": "Answer length",
+    "property": "mod.dia-sidebar.search",
+    "label": "Web search",
     "type": "dropdown",
-    "defaultValue": "concise",
+    "defaultValue": "auto",
     "placeholder": false,
     "options": [
       {
-        "label": "Concise",
-        "value": "concise"
+        "label": "Automatic, when a question needs it",
+        "value": "auto"
       },
       {
-        "label": "Balanced",
-        "value": "balanced"
+        "label": "Only when I ask (+ menu or @Web)",
+        "value": "manual"
+      },
+      {
+        "label": "Off",
+        "value": "off"
       }
     ]
   },
@@ -61,7 +47,7 @@
   },
   {
     "property": "mod.dia-sidebar.entersends",
-    "label": "Press Enter to send  (off: Enter adds a new line, Ctrl/Cmd+Enter sends)",
+    "label": "Press Enter to send (off: Cmd/Ctrl+Enter sends)",
     "type": "checkbox",
     "defaultValue": true
   },
@@ -82,35 +68,8 @@
     "defaultValue": true
   },
   {
-    "property": "mod.dia-sidebar.ytstamps",
-    "label": "Keep timestamps in YouTube transcripts  (needed for key moments)",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
     "type": "separator",
-    "label": "**Web search**"
-  },
-  {
-    "property": "mod.dia-sidebar.websearch",
-    "label": "Search the web",
-    "type": "dropdown",
-    "defaultValue": "manual",
-    "placeholder": false,
-    "options": [
-      {
-        "label": "Only when I ask (+ menu or @Web)",
-        "value": "manual"
-      },
-      {
-        "label": "Off",
-        "value": "off"
-      }
-    ]
-  },
-  {
-    "type": "separator",
-    "label": "**Appearance**\n*The sidebar always sits opposite your tab sidebar. Drag its edge to resize it. Double-click the edge to reset.*"
+    "label": "**Appearance**"
   },
   {
     "property": "mod.dia-sidebar.accent",
@@ -165,5 +124,68 @@
     "label": "Save chat history on this computer",
     "type": "checkbox",
     "defaultValue": true
+  },
+  {
+    "type": "separator",
+    "label": "**Setup**\n*Pick models and set effort from the model menu at the top of the sidebar.*"
+  },
+  {
+    "property": "mod.dia-sidebar.rerunsetup",
+    "label": "Run the setup guide again (removes models you added)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "type": "separator",
+    "label": "**Advanced**"
+  },
+  {
+    "property": "mod.dia-sidebar.advanced",
+    "label": "Show advanced options",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "type": "separator",
+    "label": "**Apple Intelligence server**\n*Only for AFM Server. Other models are added from the sidebar.*",
+    "id": "dia-adv-sep",
+    "conditions": [
+      {
+        "if": {
+          "property": "mod.dia-sidebar.advanced",
+          "value": true
+        }
+      }
+    ]
+  },
+  {
+    "property": "mod.dia-sidebar.server",
+    "label": "AFM Server address",
+    "type": "string",
+    "defaultValue": "http://127.0.0.1:11435/v1",
+    "placeholder": "http://127.0.0.1:11435/v1",
+    "conditions": [
+      {
+        "if": {
+          "property": "mod.dia-sidebar.advanced",
+          "value": true
+        }
+      }
+    ]
+  },
+  {
+    "property": "mod.dia-sidebar.apikey",
+    "label": "AFM Server API key",
+    "type": "string",
+    "defaultValue": "",
+    "placeholder": "Leave blank unless AFM Server asks for one",
+    "conditions": [
+      {
+        "if": {
+          "property": "mod.dia-sidebar.advanced",
+          "value": true
+        }
+      }
+    ]
   }
 ]

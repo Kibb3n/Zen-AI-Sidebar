@@ -1,8 +1,8 @@
 {
   "id": "dia-sidebar",
   "name": "Dia Sidebar",
-  "version": "2.1.0",
-  "description": "A Dia-style AI chat sidebar for Zen using Apple Intelligence via AFM Server, plus any OpenAI-compatible models you add (switch from the sidebar header). Includes drag-and-drop context, a full-size chat menu, history, Skills, web search and YouTube key moments. Press ⌘E/Ctrl+E or use the chat button in the URL bar.",
+  "version": "2.2.0",
+  "description": "A Dia-style AI chat sidebar for Zen. Apple Intelligence via AFM Server, Google Gemini with just an API key, or any OpenAI-compatible model: switch models and set effort from the sidebar. Automatic web search, drag-and-drop context, history, Skills and YouTube key moments. Press ⌘E/Ctrl+E on any page.",
   "author": "you",
   "homepage": "https://github.com/YOUR_USERNAME/dia-sidebar",
   "tags": [
