@@ -164,6 +164,7 @@
   .dia-icon { appearance: none; background: transparent; border: 0; cursor: pointer; width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; color: var(--mute); transition: background-color 0.15s, color 0.15s, transform 0.15s var(--ease); }
   .dia-icon:hover { background: var(--soft); color: var(--fg); }
   .dia-icon:active { transform: scale(0.92); }
+  .dia-webbtn.on { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }
   .dia-head .dia-icon { width: 34px; height: 34px; border-radius: 12px; }
   .dia-head .dia-icon .dia-svg { width: 20px; height: 20px; }
   .dia-head .dia-layout { width: auto; padding: 0 6px 0 8px; display: inline-flex; align-items: center; gap: 1px; }
@@ -1101,10 +1102,11 @@
     else if (Number.isFinite(date)) e.retryAfterMs = Math.max(0, date - Date.now());
     return e;
   };
+  const responseStatus = (e) => Number(e?.status || (String(e?.message || e).match(/^(\d{3})\b/) || [])[1]);
   const userFacingError = (e) => {
     const message = String(e?.message || e);
-    const status = Number(e?.status || (message.match(/^(\d{3})\b/) || [])[1]);
-    if (status === 429) return "This model is rate-limited right now. The sidebar retried automatically. Try again shortly, switch models, or check your provider's quota.";
+    if (responseStatus(e) === 429 && provider() === "gemini") return "Google has rate-limited this Gemini API project. Check this model's limits in Google AI Studio. If its quota is exhausted or set to zero, wait for its reset, choose a model with available quota, or enable Gemini API billing; the sidebar can't override Google's limits.";
+    if (responseStatus(e) === 429) return "This model is rate-limited right now. The sidebar retried automatically. Try again shortly, switch models, or check your provider's quota.";
     return message;
   };
 
@@ -1195,8 +1197,8 @@
     yield* fetchChunks(url, headers, body, signal);
   }
 
-  // Providers can return a transient 429 before streaming starts. Retry once, respecting
-  // Retry-After when available, and let the UI report a useful message if the limit remains.
+  // Providers can return a transient 429 before streaming starts. Retry with a short bounded
+  // backoff, respecting Retry-After when available, then let the UI explain any remaining quota limit.
   function waitForRetry(ms, signal) {
     if (signal?.aborted) return Promise.reject(new DOMException("aborted", "AbortError"));
     return new Promise((resolve, reject) => {
@@ -1206,12 +1208,12 @@
       if (signal?.aborted) onAbort();
     });
   }
-  async function* resilientChunks(url, headers, body, signal) {
+  async function* resilientChunks(url, headers, body, signal, maxRetries = 1) {
     for (let attempt = 0; ; attempt++) {
       try { yield* chunks(url, headers, body, signal); return; }
       catch (e) {
-        if (e.status !== 429 || attempt >= 1 || signal?.aborted) throw e;
-        const delay = Math.min(10000, Math.max(1000, e.retryAfterMs || 1000));
+        if (e.status !== 429 || attempt >= maxRetries || signal?.aborted) throw e;
+        const delay = Math.min(10000, Math.max(1000, e.retryAfterMs || 1000 * 2 ** attempt));
         await waitForRetry(delay, signal);
       }
     }
@@ -1459,9 +1461,9 @@
         const srcs = new Map(), seenQ = new Set();
         try {
           const url = `${GEMINI_BASE}/models/${encodeURIComponent(mid)}:streamGenerateContent?alt=sse`;
-          for await (const j of sseEvents(resilientChunks(url, headers, JSON.stringify(body), signal))) {
+          for await (const j of sseEvents(resilientChunks(url, headers, JSON.stringify(body), signal, 2))) {
+            if (j.error) { const err = new Error(j.error.message || "Gemini API error"); err.status = Number(j.error.code); throw err; }
             got = true;
-            if (j.error) throw new Error(j.error.message || "Gemini API error");
             if (j.promptFeedback?.blockReason) throw new Error("Gemini blocked this request (" + j.promptFeedback.blockReason + ")");
             const c = j.candidates?.[0];
             if (!c) continue;
@@ -1483,7 +1485,11 @@
           if (e.name === "AbortError" || got) throw e;
           const m = String(e.message || "");
           if (useThink && /thinking|thought/i.test(m)) { useThink = false; continue; } // this model doesn't take that setting
-          if (e.status === 429 && autoChoice && ci < Math.min(cands.length - 1, 1)) { lastErr = e; break; } // one alternate Gemini model may have a separate free-tier limit
+          if (e.status === 429 && autoChoice && ci < Math.min(cands.length - 1, 2)) {
+            yield { t: "status", d: `${mid} is rate-limited; trying another Gemini model…` };
+            lastErr = e;
+            break;
+          } // other models can have separate quota buckets
           if (/^404\b|not found|not supported|no longer available|deprecated/i.test(m) && !/search|ground|tool/i.test(m) && ci < cands.length - 1) { lastErr = e; break; } // try the next model
           throw e;
         }
@@ -2046,7 +2052,7 @@
 
   // ---------- per-tab session ----------
   function makeSession(src) {
-    let panel, logEl, input, sendBtn, pillsEl, cardsEl, tabPillEl, webPillEl, composerEl, titleEl, modelBtnEl, sheetEl = null, hmenuEl = null, hmenuKind = "";
+    let panel, logEl, input, sendBtn, pillsEl, cardsEl, tabPillEl, webBtnEl, composerEl, titleEl, modelBtnEl, sheetEl = null, hmenuEl = null, hmenuKind = "";
     let started = false, busy = false, generating = false, stopped = false, closed = false, userHidden = false, wantFocus = false;
     let page = null, convo = [], refs = [], ctrl = null, gen = 0, refSeq = 0, chatId = null, chatTitle = "";
     let usePage = true, skill = null, formats = [], manage = false, webOn = false; // webOn: the globe button
@@ -2395,7 +2401,7 @@
     const toolItems = (q) => {
       const out = [];
       if (!q || "tabs".startsWith(q) || "manage".startsWith(q)) out.push({ label: "@Tabs", ico: "folder", sub: "Manage open tabs", run: () => { manage = true; renderPills(); } });
-      if (webMode() !== "off" && (!q || "web".startsWith(q) || "search".startsWith(q))) out.push({ label: "@Web", ico: "globe", sub: "Search the web", run: () => { setWeb(true); } });
+      if (!q || "web".startsWith(q) || "search".startsWith(q)) out.push({ label: "@Web", ico: "globe", sub: "Force a web search", run: () => { setWeb(true); } });
       return out;
     };
     function slashMenu(start, q) {
@@ -2427,7 +2433,7 @@
         { label: "Paste clipboard text", ico: "copy", run: pasteCard },
       ];
       if (!usePage && !started && srcUrl()) items.push({ label: "Add this page", ico: "page", run: () => { usePage = true; renderPills(); } });
-      if (webMode() !== "off") items.push({ label: webOn ? "Turn off web search" : "Search the web", ico: "globe", run: () => setWeb(!webOn) });
+      items.push({ label: webOn ? "Turn off web search" : "Search the web", ico: "globe", run: () => setWeb(!webOn) });
       if (tabs.length) items.push({ sep: "Add a tab  ·  or type @" }, ...tabItems(tabs));
       items.push({ sep: "Skills  ·  or type /" }, { label: "Browse skills…", ico: "spark", run: () => openSkills() }, { label: "New skill…", ico: "plus", run: () => openSkills(true) });
       items.push({ sep: "Tools" }, ...toolItems(""));
@@ -2442,11 +2448,13 @@
       if (m) return atMenu(caret - m[1].length - 1, m[1].toLowerCase());
       if (pop && pop.trigger !== "plus") closePop();
     }
-    // "Search the web" (+ menu or @Web) forces a web search for this chat and shows a small Web chip in the bottom row.
-    // In "auto" mode Anthropic/Gemini already decide on their own.
+    // The persistent globe forces a search for each message in this chat, including when global
+    // search is Off. Browser-side search works for AFM and other models without a native search tool.
     function updateWebBtn() {
-      if (!webPillEl) return;
-      webPillEl.hidden = !(webOn && webMode() !== "off");
+      if (!webBtnEl) return;
+      webBtnEl.classList.toggle("on", webOn);
+      webBtnEl.setAttribute("aria-pressed", String(webOn));
+      webBtnEl.title = webOn ? "Web search is on for this chat. Click to turn it off." : "Force web search for this chat (works with AFM).";
     }
     function setWeb(on) {
       webOn = !!on;
@@ -2519,7 +2527,7 @@
       if (resuming) msgs.push({ role: "user", content: "Continue exactly where you stopped. Do not repeat what you already wrote." });
       const heur = webMode() === "auto" && !lastU?.fromSkill && needsWeb(lastU?.label || lastU?.content || "");
       const forced = !!lastU?.web || heur;
-      const nativeWeb = isNative() && !searchBroken.has(provider()) && webMode() !== "off" && (webMode() === "auto" || forced); // Anthropic/Gemini run their own search
+      const nativeWeb = isNative() && !searchBroken.has(provider()) && (forced || webMode() === "auto"); // explicit globe/@Web works even when automatic search is Off
       return { system: systemPrompt(), pageBlock: [pageBlock, webCtx?.text].filter(Boolean).join("\n\n"), messages: msgs, web: nativeWeb, forceWeb: forced };
     }
 
@@ -2788,7 +2796,7 @@
               block.insertBefore(h("div", { className: "dia-note", textContent: "Couldn't search the web: " + e.message }), answerEl);
             }
           };
-          const wantsSearch = !prior && webMode() !== "off" && (lastU?.web || (webMode() === "auto" && !lastU?.fromSkill));
+          const wantsSearch = !prior && (lastU?.web || (webMode() === "auto" && !lastU?.fromSkill));
           if (wantsSearch && (!isNative() || searchBroken.has(provider()))) await runFallback();
           // High effort on the small on-device model: read the whole page in parts, keep notes for this question
           let deep = null;
@@ -2837,6 +2845,11 @@
           const lastU = [...convo].reverse().find((m) => m.role === "user");
           const errRow = h("div", { className: "dia-actions" },
             h("button", { className: "dia-mini", textContent: "Retry", onclick: () => { if (busy) return; block.remove(); generate(); } }));
+          if (responseStatus(e) === 429 && provider() === "gemini") {
+            errRow.append(
+              h("button", { className: "dia-mini", textContent: "Choose another model", onclick: () => openModels() }),
+              h("button", { className: "dia-mini", textContent: "Check Gemini limits", onclick: () => openLink("https://aistudio.google.com/rate-limit?timeRange=last-28-days") }));
+          }
           if (lastU?.refs?.length) errRow.append(h("button", { className: "dia-mini", textContent: "Retry without attachments", onclick: () => {
             if (busy) return; lastU.refs = []; block.remove(); generate(); } }));
           block.append(errRow);
@@ -3221,7 +3234,7 @@
         done(entry);
       } });
       body.replaceChildren(h("div", { className: "dia-form" },
-        h("div", { className: "dia-onb-sub", textContent: "Get a free key in Google AI Studio, paste it here, and you're done. The newest model of the kind you pick is used automatically." }),
+        h("div", { className: "dia-onb-sub", textContent: "Sign in to Google AI Studio with your existing Google account, create a Gemini API key, and paste it here. The newest model of the kind you pick is used automatically." }),
         h("div", { className: "dia-edit-row" }, h("button", { className: "dia-btn", textContent: "Get a free key", onclick: () => openLink("https://aistudio.google.com/apikey") })),
         h("label", { textContent: "API key" }), key,
         h("label", { textContent: "Which kind" }), seg,
@@ -3445,11 +3458,13 @@
       sendBtn.addEventListener("mousedown", (e) => e.preventDefault()); // keep typing focus in the box after sending
       const addBtn = h("button", { className: "dia-icon dia-add", title: "Attach files, add tabs, Skills", onclick: (e) => { e.stopPropagation(); plusMenu(); } }, icon("plus"));
       tabPillEl = h("button", { className: "dia-tabpill", hidden: true, onclick: () => { if (started) return; usePage = !usePage; renderPills(); } });
-      webPillEl = h("button", { className: "dia-chip dia-web", hidden: true, title: "Web search is on for this chat. Click to turn off.", onclick: () => setWeb(false) }, icon("globe"), "Web");
+      webBtnEl = h("button", { className: "dia-icon dia-webbtn", title: "Force web search for this chat (works with AFM).", onclick: () => setWeb(!webOn) }, icon("globe"));
+      webBtnEl.setAttribute("aria-label", "Toggle web search");
+      webBtnEl.setAttribute("aria-pressed", "false");
       const camBtn = h("button", { className: "dia-icon dia-cam", title: "Capture this page", onclick: () => addCapture() }, icon("camera"));
-      for (const b of [addBtn, tabPillEl, webPillEl, camBtn]) b.addEventListener("mousedown", (e) => e.preventDefault()); // keep typing focus in the box
+      for (const b of [addBtn, tabPillEl, webBtnEl, camBtn]) b.addEventListener("mousedown", (e) => e.preventDefault()); // keep typing focus in the box
       composerEl = h("div", { className: "dia-composer" }, cardsEl, pillsEl, input,
-        h("div", { className: "dia-row" }, h("div", { className: "dia-row-left" }, addBtn, tabPillEl, webPillEl), h("div", { className: "dia-row-right" }, camBtn, sendBtn)));
+        h("div", { className: "dia-row" }, h("div", { className: "dia-row-left" }, addBtn, tabPillEl, webBtnEl), h("div", { className: "dia-row-right" }, camBtn, sendBtn)));
       const dropzone = h("div", { className: "dia-dropzone" }, icon("drop"), h("span", { textContent: "Drop to add as context" }), h("small", { textContent: "Files, tabs or tab groups" }));
       panel = h("div", { className: "dia-panel", hidden: true }, head, logEl, h("div", { className: "dia-foot" }, composerEl), dropzone);
       // drag files, tabs (from the tab strip or Zen's sidebar) or whole tab groups onto the sidebar

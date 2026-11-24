@@ -7,7 +7,7 @@ macOS) and only hides when a page itself goes fullscreen, such as a video.
 
 It looks like Dia's sidebar: a bare header (new chat and the **model picker** on the left, a menu and close on the right), a
 blank empty chat, and one big rounded composer with your context cards, the box, and a bottom row with **+**, the current tab
-as a pill, a **camera** and a round send button. It uses your Zen space's own colours, so it follows each space and Zen's
+as a pill, a **globe** to force web search, a **camera** and a round send button. It uses your Zen space's own colours, so it follows each space and Zen's
 light/dark setting.
 
 ## Opening it
@@ -34,7 +34,8 @@ window. **Add or manage models…** opens a sheet to add as many as you like:
 - **Apple Intelligence** (built in): runs on your Mac through AFM Server with the model `apple.local`. The default address is
   `http://127.0.0.1:11435/v1`. If you changed it, or turned on key protection, set the address and key under
   **Advanced** in the mod's settings.
-- **Google Gemini**: paste an API key from Google AI Studio (the form has a button that opens it) and choose Flash (fast),
+- **Google Gemini**: sign in to Google AI Studio with your existing Google account, create an API key (the form has a button
+  that opens it), and choose Flash (fast),
   Pro (smartest) or Flash-Lite (cheapest). The newest model of that kind is picked for you automatically, so new Gemini
   releases just work. **Check key** verifies the key and lists the models it can use if you would rather pick an exact one.
   Gemini reads images and PDFs, and uses Google Search by itself when a question needs it.
@@ -69,15 +70,20 @@ Effort is a slider in the sidebar because Sine's settings page has no slider con
 
 - **Gemini** uses Google Search directly.
 - **Other models** (including Apple Intelligence) make one quick call to decide whether and what to search, then the mod searches
-  with DuckDuckGo by default, reads up to three pages and answers with clickable **[1] [2]** citations. In Settings, you can
+  with DuckDuckGo by default, reads up to three pages and answers with clickable **[1] [2]** citations. Click the globe to
+  force a search for this chat; it also works with Apple Intelligence through AFM Server. In Settings, you can
   choose Brave Search or a SearXNG instance and configure either as an automatic fallback if a provider is unavailable or
   rate-limited. Questions that are plainly about the page ("summarize this page") skip that extra call.
 
 Gemini's built-in search uses Google. For other models, the supported alternatives are Brave Search (API key required) and
 SearXNG (an instance address required); Google's Custom Search JSON API is closed to new customers.
 
-Change it in **Settings → Chat → Web search** (Automatic / Only when I ask / Off), or in the setup guide. *Only when I ask* means
-the **+** menu's *Search the web* or typing **@Web**. Fetched page text is not saved to history.
+Change automatic search in **Settings → Chat → Web search** (Automatic / Only when I ask / Off), or in the setup guide. The
+globe or **@Web** forces a search even when automatic search is Off. Fetched page text is not saved to history.
+
+Gemini API limits are set by Google per project and model. If Gemini still returns 429 after trying other eligible models,
+open **Check Gemini limits** in the error message to see the project's current quota in AI Studio. A quota at zero or already
+used for the day requires choosing a model with available quota or enabling Gemini API billing; retries cannot override it.
 
 ## Context: drag things in
 
