@@ -508,8 +508,10 @@
   const ABOUT_PAGE = /\b(this|the|that) (page|article|video|post|site|text|document|paper|thread|email|tab)\b|\bsummari[sz]e\b|\bproofread\b|\btranslate\b/i;
   const needsWeb = (t) => !!t && WEB_HINT.test(t) && (!ABOUT_PAGE.test(t) || /\b(search|look up|google|online)\b/i.test(t));
   const keepHistory = () => bool("history", pref("savehistory", "true") !== "false");
-  // Brave API key or SearXNG address (one field; older per-engine fields still work)
-  const searchSetup = (eng) => pref("searchsetup", "").trim() || (eng === "brave" ? pref("searchkey", "") : pref("searxurl", "")).trim();
+  // Search provider settings. DuckDuckGo remains the no-key default; configured providers are
+  // also available as automatic fallbacks when a search endpoint is unavailable or rate-limited.
+  const searchEngine = () => ["duckduckgo", "brave", "searxng"].includes(pref("searchengine", "duckduckgo")) ? pref("searchengine", "duckduckgo") : "duckduckgo";
+  const searchSetup = (eng) => (eng === "brave" ? pref("searchkey", "") : pref("searxurl", "")).trim() || pref("searchsetup", "").trim();
   const STYLES = [
     "", // Low: the base prompt is already brief
     "Give balanced answers: clear and complete without padding (this overrides the instruction to be brief).",
@@ -1090,6 +1092,21 @@
     return `${status} ${msg.replace(/\s+/g, " ").slice(0, 300)}` +
       (status === 401 || status === 403 ? " (check the API key / access settings of your AI server)" : "");
   };
+  const httpFailure = (status, body, retryAfter) => {
+    const e = new Error(httpError(status, body));
+    e.status = Number(status);
+    const seconds = Number(retryAfter);
+    const date = Date.parse(retryAfter || "");
+    if (Number.isFinite(seconds) && seconds > 0) e.retryAfterMs = seconds * 1000;
+    else if (Number.isFinite(date)) e.retryAfterMs = Math.max(0, date - Date.now());
+    return e;
+  };
+  const userFacingError = (e) => {
+    const message = String(e?.message || e);
+    const status = Number(e?.status || (message.match(/^(\d{3})\b/) || [])[1]);
+    if (status === 429) return "This model is rate-limited right now. The sidebar retried automatically. Try again shortly, switch models, or check your provider's quota.";
+    return message;
+  };
 
   // Keep both key headers for compatibility with AFM Server builds that use either name.
   const authHeaders = () =>
@@ -1097,7 +1114,7 @@
 
   async function* fetchChunks(url, headers, body, signal) {
     const res = await fetch(url, { method: "POST", signal, headers, body });
-    if (!res.ok) throw new Error(httpError(res.status, await res.text()));
+    if (!res.ok) throw httpFailure(res.status, await res.text(), res.headers?.get?.("Retry-After"));
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     for (;;) {
@@ -1126,7 +1143,7 @@
     }
 
     const queue = [];
-    let wake = null, done = false, failure = null, status = 0, full = "";
+    let wake = null, done = false, failure = null, status = 0, full = "", retryAfter = "";
     const ping = () => { wake?.(); wake = null; };
     const dec = new TextDecoder();
     const listener = {
@@ -1139,6 +1156,7 @@
         if (status < 400) { queue.push(txt); ping(); }
       },
       onStopRequest(_req, code) {
+        try { retryAfter = ch.getResponseHeader("Retry-After"); } catch {}
         if (signal.aborted) failure = new DOMException("aborted", "AbortError");
         else if (!Components.isSuccessCode(code) && !status) failure = new TypeError("network error");
         done = true;
@@ -1161,7 +1179,7 @@
       await new Promise((r) => (wake = r));
     }
     if (failure) throw failure;
-    if (status >= 400) throw new Error(httpError(status, full));
+    if (status >= 400) throw httpFailure(status, full, retryAfter);
   }
 
   async function* chunks(url, headers, body, signal) {
@@ -1175,6 +1193,28 @@
       }
     }
     yield* fetchChunks(url, headers, body, signal);
+  }
+
+  // Providers can return a transient 429 before streaming starts. Retry once, respecting
+  // Retry-After when available, and let the UI report a useful message if the limit remains.
+  function waitForRetry(ms, signal) {
+    if (signal?.aborted) return Promise.reject(new DOMException("aborted", "AbortError"));
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { signal?.removeEventListener("abort", onAbort); resolve(); }, ms);
+      const onAbort = () => { clearTimeout(timer); signal?.removeEventListener("abort", onAbort); reject(new DOMException("aborted", "AbortError")); };
+      signal?.addEventListener("abort", onAbort, { once: true });
+      if (signal?.aborted) onAbort();
+    });
+  }
+  async function* resilientChunks(url, headers, body, signal) {
+    for (let attempt = 0; ; attempt++) {
+      try { yield* chunks(url, headers, body, signal); return; }
+      catch (e) {
+        if (e.status !== 429 || attempt >= 1 || signal?.aborted) throw e;
+        const delay = Math.min(10000, Math.max(1000, e.retryAfterMs || 1000));
+        await waitForRetry(delay, signal);
+      }
+    }
   }
 
   // GET (used to list a server's models). Local servers go through a raw channel, like the chat requests.
@@ -1402,6 +1442,7 @@
     }
     const tb = req.quick ? 0 : thinkBudget();
     const cands = await geminiCandidates(signal);
+    const autoChoice = !/^gemini-/.test((activeModel().model || "").trim().replace(/^models\//, ""));
     let lastErr = null;
     for (let ci = 0; ci < cands.length; ci++) {
       const mid = cands[ci];
@@ -1418,7 +1459,7 @@
         const srcs = new Map(), seenQ = new Set();
         try {
           const url = `${GEMINI_BASE}/models/${encodeURIComponent(mid)}:streamGenerateContent?alt=sse`;
-          for await (const j of sseEvents(chunks(url, headers, JSON.stringify(body), signal))) {
+          for await (const j of sseEvents(resilientChunks(url, headers, JSON.stringify(body), signal))) {
             got = true;
             if (j.error) throw new Error(j.error.message || "Gemini API error");
             if (j.promptFeedback?.blockReason) throw new Error("Gemini blocked this request (" + j.promptFeedback.blockReason + ")");
@@ -1442,6 +1483,7 @@
           if (e.name === "AbortError" || got) throw e;
           const m = String(e.message || "");
           if (useThink && /thinking|thought/i.test(m)) { useThink = false; continue; } // this model doesn't take that setting
+          if (e.status === 429 && autoChoice && ci < Math.min(cands.length - 1, 1)) { lastErr = e; break; } // one alternate Gemini model may have a separate free-tier limit
           if (/^404\b|not found|not supported|no longer available|deprecated/i.test(m) && !/search|ground|tool/i.test(m) && ci < cands.length - 1) { lastErr = e; break; } // try the next model
           throw e;
         }
@@ -1473,7 +1515,7 @@
     }
     let sawTool = false, toolIdx = -1, toolBuf = "";
     const results = [], cited = [];
-    for await (const j of sseEvents(chunks(url, headers, JSON.stringify(body), signal))) {
+    for await (const j of sseEvents(resilientChunks(url, headers, JSON.stringify(body), signal))) {
       if (prov === "anthropic") {
         if (j.type === "error") throw new Error(j.error?.message || "API error");
         if (j.type === "content_block_start") {
@@ -1553,39 +1595,53 @@
     return (root?.textContent || "").replace(/\s+/g, " ").trim();
   }
   async function webSearch(q, signal) {
-    const eng = "duckduckgo"; // keep local-model settings simple; no external search API key is needed
     const enc = encodeURIComponent(q);
-    let results = [];
-    if (eng === "brave") {
-      const key = searchSetup("brave");
-      if (!key) throw new Error("Add your Brave Search API key in the mod's settings");
-      const r = await fetchText(`https://api.search.brave.com/res/v1/web/search?q=${enc}&count=6`, { headers: { Accept: "application/json", "X-Subscription-Token": key } }, 9000, signal);
-      if (!r.ok) throw new Error("Brave Search returned " + r.status);
-      results = (JSON.parse(r.text).web?.results || []).map((x) => ({ title: stripTags(x.title), url: x.url, snippet: stripTags(x.description) }));
-    } else if (eng === "searxng") {
-      const base = searchSetup("searxng").replace(/\/+$/, "");
-      if (!base) throw new Error("Add your SearXNG address in the mod's settings");
-      const r = await fetchText(`${base}/search?q=${enc}&format=json`, {}, 9000, signal);
-      if (!r.ok) throw new Error("SearXNG returned " + r.status + " (JSON output must be enabled on the instance)");
-      results = (JSON.parse(r.text).results || []).map((x) => ({ title: x.title || "", url: x.url, snippet: x.content || "" }));
-    } else {
-      const r = await fetchText(`https://html.duckduckgo.com/html/?q=${enc}`, {}, 9000, signal);
-      const doc = new DOMParser().parseFromString(r.text, "text/html");
-      for (const el of doc.querySelectorAll(".result")) {
-        const a = el.querySelector("a.result__a");
-        if (!a || el.classList.contains("result--ad")) continue;
-        let href = a.getAttribute("href") || "";
-        const m = href.match(/[?&]uddg=([^&]+)/);
-        if (m) href = decodeURIComponent(m[1]);
-        if (href.startsWith("//")) href = "https:" + href;
-        if (!/^https?:\/\//.test(href)) continue;
-        results.push({ title: a.textContent.trim(), url: href, snippet: el.querySelector(".result__snippet")?.textContent.trim() || "" });
-        if (results.length >= 6) break;
+    const preferred = searchEngine();
+    const ready = { duckduckgo: true, brave: !!searchSetup("brave"), searxng: !!searchSetup("searxng") };
+    const order = [preferred, ...["duckduckgo", "brave", "searxng"].filter((x) => x !== preferred && ready[x])];
+    const errors = [];
+    for (const eng of order) {
+      if (!ready[eng]) {
+        if (eng === preferred) errors.push("Add a Brave Search API key or SearXNG address in the mod's settings");
+        continue;
+      }
+      try {
+        let results = [];
+        if (eng === "brave") {
+          const key = searchSetup("brave");
+          const r = await fetchText(`https://api.search.brave.com/res/v1/web/search?q=${enc}&count=6`, { headers: { Accept: "application/json", "X-Subscription-Token": key } }, 9000, signal);
+          if (!r.ok) throw new Error("Brave Search returned " + r.status);
+          results = (JSON.parse(r.text).web?.results || []).map((x) => ({ title: stripTags(x.title), url: x.url, snippet: stripTags(x.description) }));
+        } else if (eng === "searxng") {
+          const base = searchSetup("searxng").replace(/\/+$/, "");
+          const r = await fetchText(`${base}/search?q=${enc}&format=json`, {}, 9000, signal);
+          if (!r.ok) throw new Error("SearXNG returned " + r.status + " (JSON output must be enabled on the instance)");
+          results = (JSON.parse(r.text).results || []).map((x) => ({ title: x.title || "", url: x.url, snippet: x.content || "" }));
+        } else {
+          const r = await fetchText(`https://html.duckduckgo.com/html/?q=${enc}`, {}, 9000, signal);
+          if (!r.ok) throw new Error("DuckDuckGo returned " + r.status);
+          const doc = new DOMParser().parseFromString(r.text, "text/html");
+          for (const el of doc.querySelectorAll(".result")) {
+            const a = el.querySelector("a.result__a");
+            if (!a || el.classList.contains("result--ad")) continue;
+            let href = a.getAttribute("href") || "";
+            const m = href.match(/[?&]uddg=([^&]+)/);
+            if (m) href = decodeURIComponent(m[1]);
+            if (href.startsWith("//")) href = "https:" + href;
+            if (!/^https?:\/\//.test(href)) continue;
+            results.push({ title: a.textContent.trim(), url: href, snippet: el.querySelector(".result__snippet")?.textContent.trim() || "" });
+            if (results.length >= 6) break;
+          }
+        }
+        results = results.filter((r) => /^https?:\/\//.test(r.url)).slice(0, 6);
+        if (results.length) return results;
+        errors.push(`${eng === "duckduckgo" ? "DuckDuckGo" : eng === "brave" ? "Brave Search" : "SearXNG"} returned no results (possibly rate-limited)`);
+      } catch (e) {
+        if (e.name === "AbortError") throw e;
+        errors.push(`${eng === "duckduckgo" ? "DuckDuckGo" : eng === "brave" ? "Brave Search" : "SearXNG"}: ${String(e.message || e).slice(0, 140)}`);
       }
     }
-    results = results.filter((r) => /^https?:\/\//.test(r.url)).slice(0, 6);
-    if (!results.length) throw new Error("DuckDuckGo gave no results (it may be rate-limiting). Try again in a moment.");
-    return results;
+    throw new Error("Web search failed. " + errors.join("; ") + ". Check the search settings or try again.");
   }
   async function readSources(results, signal, cap) {
     await Promise.all(results.slice(0, 3).map(async (r) => {
@@ -2777,7 +2833,7 @@
         } else {
           failed = true;
           const unreachable = e instanceof TypeError;
-          block.append(h("p", { className: "dia-error", textContent: unreachable ? `Couldn't reach ${activeModel().name} at ${baseUrl()}. Is it running?` : `Couldn't answer: ${e.message}` }));
+          block.append(h("p", { className: "dia-error", textContent: unreachable ? `Couldn't reach ${activeModel().name} at ${baseUrl()}. Is it running?` : `Couldn't answer: ${userFacingError(e)}` }));
           const lastU = [...convo].reverse().find((m) => m.role === "user");
           const errRow = h("div", { className: "dia-actions" },
             h("button", { className: "dia-mini", textContent: "Retry", onclick: () => { if (busy) return; block.remove(); generate(); } }));
@@ -3263,6 +3319,10 @@
       const nav = (...b) => h("div", { className: "dia-edit-row" }, ...b);
       const card = (title, text, fn) => h("button", { className: "dia-onb-card", onclick: fn }, h("b", { textContent: title }), h("span", { textContent: text }));
       let pickStep, afmStep, prefsStep, doneStep;
+      const modelAddedStep = (entry) => body.replaceChildren(dots(1), hero(`${entry.name} is ready`),
+        sub("You can continue setup now. Adding more models is optional, and you can add or switch models later from the model menu."),
+        ...(store.models().length ? [h("div", { className: "dia-note", textContent: "Added: " + store.models().map((m) => m.name).join(", ") })] : []),
+        nav(btn("Add another model", () => pickStep()), btn("Continue", () => prefsStep(), true)));
       const welcome = () => body.replaceChildren(dots(0), hero("Chat with any page"),
         h("ul", { className: "dia-onb-list" }, ...[
           "Ask about the page you're on, or drag in tabs, files and text for extra context.",
@@ -3272,8 +3332,8 @@
         nav(btn("Skip", () => closeSheet()), btn("Get started", () => pickStep(), true)));
       pickStep = () => body.replaceChildren(dots(1), hero("Choose your AI"), sub("You can add more later and switch between them."),
         card("Apple Intelligence", "Private and free. Runs on this Mac through AFM Server.", () => afmStep()),
-        card("Google Gemini", "Fast and capable. Needs a free API key from Google AI Studio.", () => renderGeminiForm(body, null, () => pickStep(), () => pickStep())),
-        card("Something else", "Ollama, LM Studio, OpenRouter, OpenAI… any OpenAI-compatible server.", () => renderCustomForm(body, null, () => pickStep(), () => pickStep())),
+        card("Google Gemini", "Fast and capable. Needs a free API key from Google AI Studio.", () => renderGeminiForm(body, null, (entry) => modelAddedStep(entry), () => pickStep())),
+        card("Something else", "Ollama, LM Studio, OpenRouter, OpenAI… any OpenAI-compatible server.", () => renderCustomForm(body, null, (entry) => modelAddedStep(entry), () => pickStep())),
         ...(store.models().length ? [h("div", { className: "dia-note", textContent: "Added: " + store.models().map((m) => m.name).join(", ") })] : []),
         nav(btn("Back", welcome), btn("Continue", () => prefsStep(), true)));
       afmStep = () => {

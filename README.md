@@ -22,6 +22,7 @@ back when the tab is on a page again. Each tab keeps its own chat while the side
 ## Setup guide
 
 The first time you open the sidebar, a short guide helps you pick a model, set the effort and choose how web search works.
+After you save a model, setup lets you continue or optionally add another; adding more models is never required.
 To see it again, tick **Setup → Run the setup guide again** in the mod's Sine settings. **That removes any models you added**
 (Apple Intelligence stays) and shows the guide the next time the sidebar is open. If a page is already open, it shows at once.
 
@@ -68,8 +69,12 @@ Effort is a slider in the sidebar because Sine's settings page has no slider con
 
 - **Gemini** uses Google Search directly.
 - **Other models** (including Apple Intelligence) make one quick call to decide whether and what to search, then the mod searches
-  DuckDuckGo, reads up to three of the pages and answers with clickable **[1] [2]** citations. Questions that are plainly about
-  the page ("summarize this page") skip that extra call.
+  with DuckDuckGo by default, reads up to three pages and answers with clickable **[1] [2]** citations. In Settings, you can
+  choose Brave Search or a SearXNG instance and configure either as an automatic fallback if a provider is unavailable or
+  rate-limited. Questions that are plainly about the page ("summarize this page") skip that extra call.
+
+Gemini's built-in search uses Google. For other models, the supported alternatives are Brave Search (API key required) and
+SearXNG (an instance address required); Google's Custom Search JSON API is closed to new customers.
 
 Change it in **Settings → Chat → Web search** (Automatic / Only when I ask / Off), or in the setup guide. *Only when I ask* means
 the **+** menu's *Search the web* or typing **@Web**. Fetched page text is not saved to history.
@@ -148,4 +153,6 @@ over the old one under its original name and restart.
 
 - Files: `dia-sidebar.uc.js` (logic + styles), `theme.json`, `preferences.json`, `chrome.css` (toolbar icon fallback).
 - The chat icon is Ionicons' "chatbubble-ellipses" (MIT), the same glyph Zen uses for its own chat icon.
-- API keys are stored as plain text in your Firefox profile, not in this repo.
+- Model API keys are stored as plain text in `dia-sidebar-models.json` in your Firefox profile, not in this repo. A Brave
+  Search API key is stored in Firefox preferences. Search queries go to the selected provider and, if it fails, any configured
+  fallback provider.

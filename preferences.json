@@ -25,6 +25,36 @@
     ]
   },
   {
+    "type": "separator",
+    "label": "**Search provider**\n*Configured alternatives are tried automatically if a search is unavailable or rate-limited.*"
+  },
+  {
+    "property": "mod.dia-sidebar.searchengine",
+    "label": "Preferred search provider",
+    "type": "dropdown",
+    "defaultValue": "duckduckgo",
+    "placeholder": false,
+    "options": [
+      { "label": "DuckDuckGo", "value": "duckduckgo" },
+      { "label": "Brave Search", "value": "brave" },
+      { "label": "SearXNG", "value": "searxng" }
+    ]
+  },
+  {
+    "property": "mod.dia-sidebar.searchkey",
+    "label": "Brave Search API key (optional fallback)",
+    "type": "string",
+    "defaultValue": "",
+    "placeholder": "Paste your Brave Search API key"
+  },
+  {
+    "property": "mod.dia-sidebar.searxurl",
+    "label": "SearXNG address (optional fallback)",
+    "type": "string",
+    "defaultValue": "",
+    "placeholder": "https://your-searxng.example"
+  },
+  {
     "property": "mod.dia-sidebar.autosummarize",
     "label": "Summarize automatically",
     "type": "dropdown",
