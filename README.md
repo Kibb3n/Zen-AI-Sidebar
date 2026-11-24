@@ -77,7 +77,9 @@ Effort is a slider in the sidebar because Sine's settings page has no slider con
   searches with DuckDuckGo by default, reads up to three pages and answers with clickable **[1] [2]** citations. Click the
   globe to force a search for this chat; it also works with Apple Intelligence through AFM Server. In Settings, you can
   choose Google Search, Brave Search or a SearXNG instance. Available providers are tried as fallbacks if the selected one
-  is unavailable or rate-limited. Questions that are plainly about the page ("summarize this page") skip that extra call.
+  is unavailable or rate-limited. When you ask it to search links embedded in the current page, it can choose relevant links,
+  read up to three linked pages and answer with clickable citations. Questions that are plainly about the page ("summarize this
+  page") skip that extra call.
 
 Google Search reads the browser's Google results page, spaces requests out, and can use the existing browser session when
 available. Google may still show a CAPTCHA or rate-limit the request; the mod then tries another configured provider. This is
@@ -103,9 +105,10 @@ Drop onto the sidebar (a "Drop to add as context" overlay appears):
   Paste images straight into the box too.
 - **Selected text**: select text on the page and it appears as a Selection card, or right-click → *Ask Chat about selection*.
 
-The current page starts as a context card above the chat box. It is greyed out when excluded from the first message. After
-that first message, it becomes a normal removable tab card for later messages. The **camera** attaches a screenshot as a
-*Capture* card (only models marked *Can read images* look at it). Up to 12 cards at a time.
+The current page starts as a context card above the chat box with an **Included / Skipped** control. It is greyed out when
+skipped from the first message. After that first message, it becomes a normal removable tab card for later messages. Use **+ →
+Add an open tab…** to search and choose from your loaded web tabs. The **camera** attaches a screenshot as a *Capture* card
+(only models marked *Can read images* look at it). Up to 12 cards at a time.
 
 ## Chat
 

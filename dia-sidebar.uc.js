@@ -50,12 +50,12 @@
   // For models without a built-in search tool: one quick call decides whether (and what) to search
   const ROUTER_SYSTEM =
     "You decide whether a browser assistant must search the web to answer the user's latest message. " +
-    "Reply with exactly NO, or with SEARCH: followed by one concise web search query (max 12 words). " +
+    "Reply with exactly NO, SEARCH: followed by one concise web search query (max 12 words), or LINKS: followed by up to 3 comma-separated link numbers. " +
+    "When the user explicitly asks to search/read/follow links embedded in the current page, choose relevant numbered links from the supplied page-link list and reply LINKS: numbers. " +
     "Answer NO for questions about the page the user is viewing, rewriting, summarizing, translating, math, coding help, or timeless general knowledge. " +
     "Answer SEARCH for news, recent or changing facts, prices, products, people or companies you may not know, or when the user asks to look something up online. Never add anything else.";
   const ROUTER_FORCED =
-    "Write the single best web search query (max 12 words) for the user's latest message, using the recent chat for context. " +
-    "Reply with exactly SEARCH: followed by the query, nothing else.";
+    "Use the recent chat and supplied page-link list to act on the user's latest message. If they explicitly ask to search/read/follow links embedded in the current page, select up to 3 relevant numbered links and reply exactly LINKS: followed by their numbers. Otherwise write the single best web search query (max 12 words) and reply exactly SEARCH: followed by the query. Never add anything else.";
   // @formats: steer the shape of the answer
   const FORMATS = [
     { id: "list", name: "list", hint: "Bulleted list", prompt: "Format the answer as a concise bulleted list." },
@@ -260,10 +260,12 @@
   .dia-cards:empty { display: none; }
   .dia-card { position: relative; display: flex; align-items: center; gap: 12px; max-width: 100%; box-sizing: border-box; padding: 8px 36px 8px 8px; border-radius: 16px; background: var(--glass); animation: dia-in 0.25s var(--ease) both; }
   .dia-card-static { padding-right: 10px; }
-  .dia-card.dia-off { opacity: 0.42; filter: grayscale(1); }
-  .dia-card.dia-page-toggle { cursor: pointer; transition: opacity 0.15s, filter 0.15s, background-color 0.15s; }
-  .dia-card.dia-page-toggle:hover { background: var(--soft); }
-  .dia-card.dia-page-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .dia-card.dia-off { opacity: 0.48; filter: grayscale(1); background: color-mix(in srgb, #858585 14%, var(--glass)); }
+  .dia-card.dia-page-toggle { transition: opacity 0.15s, filter 0.15s, background-color 0.15s; }
+  .dia-page-switch { appearance: none; flex: none; cursor: pointer; border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--fg); font: inherit; font-size: 11px; line-height: 1.2; }
+  .dia-page-switch:hover { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+  .dia-card.dia-off .dia-page-switch { background: var(--soft2); color: var(--mute); }
+  .dia-page-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .dia-card-thumb { width: 38px; height: 48px; flex: none; border-radius: 9px; overflow: hidden; display: grid; place-items: center; background: var(--soft2); color: var(--mute); }
   .dia-card-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
   .dia-card-thumb img.dia-card-fav { width: 20px; height: 20px; object-fit: contain; border-radius: 4px; }
@@ -508,6 +510,7 @@
   // messages that are clearly about live / outside information search even if the model wouldn't have chosen to
   const WEB_HINT = /\b(latest|newest|currently|right now|today|tonight|tomorrow|yesterday|this (week|weekend|month|year)|news|headlines?|breaking|price of|how much (is|does|are|do)|cost of|weather|forecast|score|standings|who won|who is the (ceo|president|prime minister|founder)|release date|when (is|does|did|will)|stock|exchange rate|trending|near me|open now|search (the )?(web|online|for)|look (it |this |that |them )?up|google|find (it |this |that )?(out|online))\b|\b20(2[4-9]|3\d)\b/i;
   const ABOUT_PAGE = /\b(this|the|that) (page|article|video|post|site|text|document|paper|thread|email|tab)\b|\bsummari[sz]e\b|\bproofread\b|\btranslate\b/i;
+  const WANTS_PAGE_LINKS = /\b(?:search|look through|check|follow|open|read|find|browse)\b.{0,70}\b(?:links?|hyperlinks?)\b|\b(?:links?|hyperlinks?)\b.{0,70}\b(?:embedded|on|in|from|within|inside)\b.{0,40}\b(?:page|site|website|article)\b/i;
   const needsWeb = (t) => !!t && WEB_HINT.test(t) && (!ABOUT_PAGE.test(t) || /\b(search|look up|google|online)\b/i.test(t));
   const keepHistory = () => bool("history", pref("savehistory", "true") !== "false");
   // Search provider settings. Google and DuckDuckGo need no API key; configured providers are
@@ -666,7 +669,28 @@
   }
 
   // ---------- page text ----------
-  function extractInContent() {
+  function extractPageLinks(doc) {
+    const root = doc.querySelector("article, main, [role=main], #mw-content-text, #content") || doc.body;
+    if (!root) return [];
+    const skip = "nav, footer, aside, header, form, .navbox, .reflist, .references, .toc, #toc, .mw-editsection";
+    const base = doc.location?.href || "";
+    const seen = new Set(), links = [];
+    for (const a of root.querySelectorAll("a[href]")) {
+      if (a.closest(skip)) continue;
+      let u;
+      try { u = new URL(a.getAttribute("href"), base); } catch { continue; }
+      if (!/^https?:$/.test(u.protocol)) continue;
+      u.hash = "";
+      if (u.href === base.replace(/#.*$/, "") || seen.has(u.href)) continue;
+      const title = (a.getAttribute("aria-label") || a.getAttribute("title") || a.innerText || a.textContent || "").replace(/\s+/g, " ").trim().slice(0, 120);
+      if (title.length < 2) continue;
+      seen.add(u.href);
+      links.push({ title, url: u.href });
+      if (links.length >= 30) break;
+    }
+    return links;
+  }
+  function extractInContent(extractLinks) {
     const doc = content.document;
     const root = doc.querySelector("article, main, [role=main], #mw-content-text, #content") || doc.body;
     const skip = "nav, footer, aside, header, form, .navbox, .reflist, .references, .toc, #toc, .mw-editsection";
@@ -678,7 +702,7 @@
     }
     let text = parts.join("\n");
     if (text.length < 200) text = (doc.body?.textContent || "").replace(/\s+/g, " ").trim();
-    sendAsyncMessage("dia-sidebar:text", { title: doc.title, url: doc.location.href, text });
+    sendAsyncMessage("dia-sidebar:text", { title: doc.title, url: doc.location.href, text, links: extractLinks ? extractLinks(doc) : [] });
   }
 
   // Read the live document from browser chrome first. This avoids depending on ReaderMode, which
@@ -1033,7 +1057,7 @@
     try {
       const doc = browser.contentDocument;
       const text = doc?.body ? extractFromDocument(doc) : "";
-      if (text) return { title: doc.title || browser.contentTitle || "Page", url, text };
+      if (text) return { title: doc.title || browser.contentTitle || "Page", url, text, links: extractPageLinks(doc) };
     } catch (e) {
       console.warn("[dia-sidebar] direct page read failed, trying messageManager", e);
     }
@@ -1051,7 +1075,7 @@
         };
         mm.addMessageListener(MSG, listener);
         mm.loadFrameScript(
-          "data:application/javascript," + encodeURIComponent(`(${extractInContent.toString()})()`),
+          "data:application/javascript," + encodeURIComponent(`(${extractInContent.toString()})(${extractPageLinks.toString()})`),
           false
         );
       });
@@ -1703,6 +1727,16 @@
       } catch {}
     }));
   }
+  async function readPageLinks(links, signal, cap) {
+    return Promise.all(links.slice(0, 3).map(async (link) => {
+      const result = { title: link.title, url: link.url, snippet: "" };
+      try {
+        const res = await fetchText(link.url, {}, 7000, signal);
+        if (res.ok && /html|text/.test(res.ctype)) result.text = htmlToText(res.text).slice(0, cap);
+      } catch (e) { if (e.name === "AbortError") throw e; }
+      return result;
+    }));
+  }
   const webBlock = (q, results, cap) =>
     `=== WEB SEARCH RESULTS for "${q}" ===\n` +
     results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${(r.text || r.snippet || "").slice(0, cap)}`).join("\n\n") +
@@ -1755,13 +1789,18 @@
     const last = [...convo].reverse().find((m) => m.role === "user");
     const msg = (last?.label || last?.content || "").slice(0, 400);
     const recent = convo.slice(-5, -1).map((m) => `${m.role}: ${(m.label || m.content || "").slice(0, 200)}`).join("\n");
-    const ctx = `Today is ${new Date().toDateString()}.\n` + (page?.title ? `Page: ${page.title}\n` : "") + (recent ? `Recent chat:\n${recent}\n` : "") + `User message: ${msg}`;
+    const options = (page?.links || []).slice(0, 20);
+    const linkList = options.length ? `Links embedded in the current page:\n${options.map((x, i) => `${i + 1}. ${x.title} — ${x.url}`).join("\n")}\n` : "";
+    const ctx = `Today is ${new Date().toDateString()}.\n` + (page?.title ? `Page: ${page.title}\n` : "") + linkList + (recent ? `Recent chat:\n${recent}\n` : "") + `User message: ${msg}`;
     let out = "";
     try { out = await askOnce(forced ? ROUTER_FORCED : ROUTER_SYSTEM, ctx, signal, true); } catch (e) { if (e.name === "AbortError") throw e; }
+    const lm = out.match(/LINKS:\s*([\d,\s]+)/i);
+    const links = lm ? [...new Set((lm[1].match(/\d+/g) || []).map(Number))].filter((n) => n > 0 && n <= options.length).slice(0, 3).map((n) => options[n - 1]) : [];
+    if (links.length) return { query: "", links };
     const m = out.match(/SEARCH:\s*(.+)/i);
     const q = (m?.[1] || "").trim().replace(/^["“'`]+|["”'`.]+$/g, "").slice(0, 200);
-    if (q) return q;
-    return forced ? msg.replace(/\s+/g, " ").slice(0, 200) : "";
+    if (q) return { query: q, links: [] };
+    return { query: forced ? msg.replace(/\s+/g, " ").slice(0, 200) : "", links: [] };
   }
 
   // ---------- markdown -> DOM ----------
@@ -2178,13 +2217,15 @@
       const el = card({ label: pd.label, sub: hostOf(pd.url) || "Current page", image: pd.image, ico: "page", tip: pd.url }, null);
       el.classList.add("dia-page-toggle");
       el.classList.toggle("dia-off", !usePage);
-      el.setAttribute("role", "button");
-      el.setAttribute("tabindex", "0");
-      el.setAttribute("aria-pressed", String(usePage));
-      el.title = usePage ? "This page is included in the first message. Click to leave it out." : "This page is left out of the first message. Click to include it.";
       const toggle = () => { if (!started) { usePage = !usePage; renderPills(); } };
-      el.addEventListener("click", toggle);
-      el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+      const switchEl = h("button", {
+        className: "dia-page-switch", type: "button", textContent: usePage ? "Included" : "Skipped",
+        title: usePage ? "Leave this page out of the first message" : "Include this page in the first message",
+        onclick: (e) => { e.stopPropagation(); toggle(); },
+      });
+      switchEl.setAttribute("aria-label", usePage ? "Page context included. Click to skip it." : "Page context skipped. Click to include it.");
+      switchEl.setAttribute("aria-pressed", String(usePage));
+      el.append(switchEl);
       return el;
     }
     function renderPills() {
@@ -2384,8 +2425,9 @@
     }
 
     // tabs that are actually loaded (skip lazy/discarded/restored-but-unloaded tabs) and on the web
+    // Zen tab wrappers do not expose linkedPanel consistently, so linkedBrowser is the reliable check.
     const loadedTabs = () => gBrowser.tabs.filter((t) =>
-      t !== src && !t.pending && t.linkedPanel && t.linkedBrowser && !t.hasAttribute?.("zen-empty-tab") && /^https?$/.test(t.linkedBrowser.currentURI?.scheme || ""));
+      t !== src && !t.pending && t.linkedBrowser && !t.hasAttribute?.("zen-empty-tab") && /^https?$/.test(t.linkedBrowser.currentURI?.scheme || ""));
     const tabGroupsList = () => { try { return [...(gBrowser.tabGroups || [])].filter((g) => (g.tabs || []).length); } catch { return []; } };
     const snapshotTabs = () => gBrowser.tabs.filter((t) => !t.hidden && !t.hasAttribute?.("zen-empty-tab")).slice(0, 60);
     const tabListText = (tabs) => tabs.map((t, i) =>
@@ -2460,28 +2502,57 @@
     }
     function atMenu(start, q) {
       const match = (s) => !q || (s || "").toLowerCase().includes(q);
-      const tabs = loadedTabs().filter((t) => match(t.label) || match(t.linkedBrowser.currentURI?.spec)).slice(0, 6);
+      const matchingTabs = loadedTabs().filter((t) => match(t.label) || match(t.linkedBrowser.currentURI?.spec));
+      const tabs = matchingTabs.slice(0, 6);
       const groups = tabGroupsList().filter((g) => match(g.label)).slice(0, 4);
       const fm = FORMATS.filter((f) => !q || f.name.startsWith(q));
       const tools = toolItems(q);
       const items = [];
       if (tabs.length) items.push({ sep: "Tabs" }, ...tabItems(tabs));
+      if (matchingTabs.length > 6) items.push({ label: "Browse all open tabs…", ico: "folder", sub: `${matchingTabs.length} matches`, run: openTabPicker });
       if (groups.length) items.push({ sep: "Tab groups" }, ...groups.map((g) => ({ label: g.label || "Unnamed group", ico: "folder", sub: (g.tabs || []).length + " tabs", run: () => addGroup(g) })));
       if (fm.length) items.push({ sep: "Formats" }, ...fm.map((f) => ({ label: "@" + f.name, ico: "edit", sub: f.hint, run: () => { formats = formats.includes(f) ? formats : [...formats, f]; renderPills(); } })));
       if (tools.length) items.push({ sep: "Tools" }, ...tools);
       showPop("at", start, items);
     }
+    function openTabPicker() {
+      const q = h("input", { type: "text", placeholder: "Search open tabs" });
+      const body = h("div", { className: "dia-sheet-body" });
+      const paint = () => {
+        const term = q.value.trim().toLowerCase();
+        const tabs = loadedTabs().filter((t) => !term || (t.label || "").toLowerCase().includes(term) || (t.linkedBrowser.currentURI?.spec || "").toLowerCase().includes(term));
+        const rows = tabs.map((t) => {
+          const row = h("div", {
+            className: "dia-row-item",
+            onclick: () => { closeSheet(); addTab(t); },
+            onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); closeSheet(); addTab(t); } },
+          }, icon("page"), h("div", { className: "dia-row-main" },
+            h("div", { className: "dia-row-title", textContent: t.label || "Untitled tab" }),
+            h("div", { className: "dia-row-sub", textContent: hostOf(t.linkedBrowser.currentURI?.spec) || t.linkedBrowser.currentURI?.spec || "Web page" })));
+          row.setAttribute("role", "button");
+          row.tabIndex = 0;
+          return row;
+        });
+        body.replaceChildren(...(rows.length ? rows : [h("div", { className: "dia-empty-note", textContent: term ? "No open tabs match." : "No other loaded web tabs are available." })]));
+      };
+      openSheet("Add a tab", h("div", { className: "dia-search" }, icon("search"), q), body);
+      q.addEventListener("input", paint);
+      paint();
+      q.focus();
+    }
     function plusMenu() {
       if (pop?.trigger === "plus") { closePop(); return; }
       closePop();
       const tabs = loadedTabs().slice(0, 6);
+      const count = loadedTabs().length;
       const items = [
         { label: "Attach file or image…", ico: "clip", run: pickFile },
         { label: "Paste clipboard text", ico: "copy", run: pasteCard },
       ];
       if (!usePage && !started && srcUrl()) items.push({ label: "Add this page", ico: "page", run: () => { usePage = true; renderPills(); } });
       items.push({ label: webOn ? "Turn off web search" : "Search the web", ico: "globe", run: () => setWeb(!webOn) });
-      if (tabs.length) items.push({ sep: "Add a tab  ·  or type @" }, ...tabItems(tabs));
+      items.push({ label: "Add an open tab…", ico: "folder", sub: count ? `${count} available` : "Choose from your loaded web tabs", run: openTabPicker });
+      if (tabs.length) items.push({ sep: "Quick add  ·  or type @" }, ...tabItems(tabs));
       items.push({ sep: "Skills  ·  or type /" }, { label: "Browse skills…", ico: "spark", run: () => openSkills() }, { label: "New skill…", ico: "plus", run: () => openSkills(true) });
       items.push({ sep: "Tools" }, ...toolItems(""));
       showPop("plus", -1, items);
@@ -2553,13 +2624,16 @@
       if (includePage && page?.youtube && !/\btimestamp|\bmoment|\bchapter|time ?code|mm:ss|\bjump to\b/i.test(req)) {
         ctx = ctx.replace(/^\[\d{1,2}:\d{2}(?::\d{2})?\]\s*/gm, "").replace(/ \(each line is prefixed with its \[mm:ss\] timestamp\)/, "");
       }
-      const pageBlock = includePage ? `=== PAGE THE USER IS VIEWING ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${ctx}` : "";
+      const linkBlock = includePage && page.links?.length
+        ? `\n\n=== LINKS EMBEDDED IN THIS PAGE ===\n${page.links.slice(0, 20).map((x, i) => `[${i + 1}] ${x.title} — ${x.url}`).join("\n")}`
+        : "";
+      const pageBlock = includePage ? `=== PAGE THE USER IS VIEWING ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${ctx}${linkBlock}` : "";
       if (provider() === "apple") {
         const upto = resuming ? convo : convo.slice(0, convo.lastIndexOf(lastU));
         const transcript = upto.slice(-2).map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${(m.label || m.content).slice(0, 500)}`).join("\n");
         const fit = (text, limit) => text.length <= limit ? text : text.slice(0, limit - 44) + "\n[…context shortened for the on-device model]";
         const budget = webCtx ? 3000 : 4200;
-        const pageContext = includePage ? (deep ? fit(`=== PAGE THE USER IS VIEWING (notes from reading all of it) ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${deep}`, budget) : fit(pageBlock, budget)) : "";
+        const pageContext = includePage ? (deep ? fit(`=== PAGE THE USER IS VIEWING (notes from reading all of it) ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${deep}${linkBlock}`, budget) : fit(pageBlock, budget)) : "";
         const webContext = webCtx ? fit(webCtx.text, 1800) : "";
         const ask = resuming ? "Continue your previous answer exactly where it stopped, without repeating it." : userText(lastU || { content: req }, true);
         return {
@@ -2576,8 +2650,9 @@
       while (msgs[0]?.role === "assistant") msgs.shift();
       if (resuming) msgs.push({ role: "user", content: "Continue exactly where you stopped. Do not repeat what you already wrote." });
       const heur = webMode() === "auto" && !lastU?.fromSkill && needsWeb(lastU?.label || lastU?.content || "");
-      const forced = !!lastU?.web || heur;
-      const nativeWeb = isNative() && !searchBroken.has(provider()) && (forced || webMode() === "auto"); // explicit globe/@Web works even when automatic search is Off
+      const linkSearch = WANTS_PAGE_LINKS.test(lastU?.label || lastU?.content || "");
+      const forced = !!lastU?.web || heur || linkSearch;
+      const nativeWeb = isNative() && !searchBroken.has(provider()) && (forced || webMode() === "auto") && !linkSearch; // page-link requests use the captured page links directly
       return { system: systemPrompt(), pageBlock: [pageBlock, webCtx?.text].filter(Boolean).join("\n\n"), messages: msgs, web: nativeWeb, forceWeb: forced };
     }
 
@@ -2825,15 +2900,23 @@
           // the model writes a query, we search, read the top pages and hand them back as numbered sources.
           // questions that are plainly about the page itself never need a search, so skip the extra routing call
           const askText = lastU?.label || lastU?.content || "";
-          const skipRouter = !lastU?.web && !heur && (askText.trim().length < 6 || ABOUT_PAGE.test(askText));
+          const linkSearch = WANTS_PAGE_LINKS.test(askText);
+          const skipRouter = !linkSearch && !lastU?.web && !heur && (askText.trim().length < 6 || ABOUT_PAGE.test(askText));
           const firstU = convo.find((m) => m.role === "user");
-          const searchPage = ((lastU === firstU && lastU?.pageContext === false) || (lastU !== firstU && pageRefPromoted)) ? null : page;
+          const searchPage = (lastU === firstU && lastU?.pageContext === false) ? null : page;
           const runFallback = async () => {
             if (skipRouter) return;
             try {
-              const q = await planSearch(convo, searchPage, !!lastU?.web || heur, signal);
-              if (q) {
-                const cap = provider() === "apple" ? 900 : 3500;
+              const route = await planSearch(convo, searchPage, !!lastU?.web || heur || linkSearch, signal);
+              const cap = provider() === "apple" ? 900 : 3500;
+              if (route.links?.length) {
+                setStatus("Searching links on this page…");
+                const results = await readPageLinks(route.links, signal, cap);
+                webCtx = { text: webBlock("links embedded in " + (searchPage?.title || "the current page"), results, cap) };
+                searchInfo = { query: "Links from " + (searchPage?.title || "the current page"), sources: results.map((r) => ({ title: r.title, url: r.url })) };
+                cites = searchInfo.sources;
+              } else if (route.query) {
+                const q = route.query;
                 setStatus(`Searching the web for “${q}”…`);
                 const results = await webSearch(q, signal);
                 setStatus("Reading sources…");
@@ -2848,8 +2931,8 @@
               block.insertBefore(h("div", { className: "dia-note", textContent: "Couldn't search the web: " + e.message }), answerEl);
             }
           };
-          const wantsSearch = !prior && (lastU?.web || (webMode() === "auto" && !lastU?.fromSkill));
-          if (wantsSearch && (!isNative() || searchBroken.has(provider()))) await runFallback();
+          const wantsSearch = !prior && (lastU?.web || linkSearch || (webMode() === "auto" && !lastU?.fromSkill));
+          if (wantsSearch && (linkSearch || !isNative() || searchBroken.has(provider()))) await runFallback();
           // High effort on the small on-device model: read the whole page in parts, keep notes for this question
           let deep = null;
           if (provider() === "apple" && effort() >= 3 && !prior && lastU === firstU && lastU?.pageContext !== false && page && !page.none && page.text.length > chunkSize() * 1.3) {
@@ -3068,7 +3151,7 @@
       const strip = (r) => ({ kind: r.kind, label: r.label, url: r.url, text: r.kind === "image" || r.kind === "pdf" ? "" : (r.text || "").slice(0, 2500) });
       store.upsert({
         id: chatId, ts: Date.now(), title: chatTitle || "Chat", url: page?.url || srcUrl() || "",
-        page: page && !page.none ? { title: page.title, url: page.url, text: page.text.slice(0, 20000), youtube: !!page.youtube, seconds: page.seconds, chapters: page.chapters } : null,
+        page: page && !page.none ? { title: page.title, url: page.url, text: page.text.slice(0, 20000), links: (page.links || []).slice(0, 30), youtube: !!page.youtube, seconds: page.seconds, chapters: page.chapters } : null,
         msgs: convo.map((m) => m.role === "user"
           ? { role: "user", content: m.content, label: m.label, formats: m.formats, refs: (m.refs || []).map(strip), pageContext: m.pageContext }
           : { role: "assistant", content: m.content, sources: m.sources, queries: m.queries, numbered: m.numbered }),
