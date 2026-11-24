@@ -6,8 +6,8 @@ your tab sidebar** and follows it if you move your tabs to the other side. It st
 macOS) and only hides when a page itself goes fullscreen, such as a video.
 
 It looks like Dia's sidebar: a bare header (new chat and the **model picker** on the left, a menu and close on the right), a
-blank empty chat, and one big rounded composer with your context cards, the box, and a bottom row with **+**, the current tab
-as a pill, a **globe** to force web search, a **camera** and a round send button. It uses your Zen space's own colours, so it follows each space and Zen's
+blank empty chat, and one big rounded composer with your context cards, the box, and a bottom row with **+**, a **globe** to
+force web search, a **camera** and a round send button. It uses your Zen space's own colours, so it follows each space and Zen's
 light/dark setting.
 
 ## Opening it
@@ -35,13 +35,17 @@ window. **Add or manage models…** opens a sheet to add as many as you like:
   `http://127.0.0.1:11435/v1`. If you changed it, or turned on key protection, set the address and key under
   **Advanced** in the mod's settings.
 - **Google Gemini**: sign in to Google AI Studio with your existing Google account, create an API key (the form has a button
-  that opens it), and choose Flash (fast),
-  Pro (smartest) or Flash-Lite (cheapest). The newest model of that kind is picked for you automatically, so new Gemini
-  releases just work. **Check key** verifies the key and lists the models it can use if you would rather pick an exact one.
+  that opens it), and choose Flash (fast), Pro (smartest) or Flash-Lite (cheapest). The newest model of that kind is picked
+  for you automatically. **Check key** verifies the key and lists the models it can use if you would rather pick an exact one.
   Gemini reads images and PDFs, and uses Google Search by itself when a question needs it.
-- **Anything OpenAI-compatible** (Ollama, LM Studio, OpenRouter, OpenAI…): name, server address, model ID and an optional key.
-  **Find models** asks the server what it offers. Three tick boxes describe the model: *Small context window* (for on-device or
-  local models limited to about 4K tokens), *Can read images*, and *Reasoning model* (sends the Effort setting to it).
+- **Claude**: paste an Anthropic API key, then **Find models** lists the Claude models enabled for that key.
+- **OpenAI · ChatGPT API**: paste an OpenAI platform API key and choose a model from its list. A ChatGPT subscription does
+  not automatically include API usage; API billing is handled separately.
+- **DeepSeek**: the current DeepSeek Flash model is prefilled, and **Find models** lists anything else enabled for your key.
+- **Ollama**: starts with its local API address and lists models already installed on your Mac. No cloud key is needed.
+- **Other compatible model** (LM Studio, OpenRouter, or another OpenAI-compatible server): provide the server address, model
+  ID and optional key. **Find models** asks the server what it offers. *Small context window*, *Can read images*, and
+  *Reasoning model* describe optional model capabilities.
 
 Models you add are stored in `dia-sidebar-models.json` in your Firefox profile folder. API keys are plain text there.
 Text-only models never receive image attachments.
@@ -69,21 +73,25 @@ Effort is a slider in the sidebar because Sine's settings page has no slider con
 **Automatic by default.** When a question needs current or outside information, the model searches the web by itself:
 
 - **Gemini** uses Google Search directly.
-- **Other models** (including Apple Intelligence) make one quick call to decide whether and what to search, then the mod searches
-  with DuckDuckGo by default, reads up to three pages and answers with clickable **[1] [2]** citations. Click the globe to
-  force a search for this chat; it also works with Apple Intelligence through AFM Server. In Settings, you can
-  choose Brave Search or a SearXNG instance and configure either as an automatic fallback if a provider is unavailable or
-  rate-limited. Questions that are plainly about the page ("summarize this page") skip that extra call.
+- **Other models** (including Apple Intelligence) make one quick call to decide whether and what to search, then the mod
+  searches with DuckDuckGo by default, reads up to three pages and answers with clickable **[1] [2]** citations. Click the
+  globe to force a search for this chat; it also works with Apple Intelligence through AFM Server. In Settings, you can
+  choose Google Search, Brave Search or a SearXNG instance. Available providers are tried as fallbacks if the selected one
+  is unavailable or rate-limited. Questions that are plainly about the page ("summarize this page") skip that extra call.
 
-Gemini's built-in search uses Google. For other models, the supported alternatives are Brave Search (API key required) and
-SearXNG (an instance address required); Google's Custom Search JSON API is closed to new customers.
+Google Search reads the browser's Google results page, spaces requests out, and can use the existing browser session when
+available. Google may still show a CAPTCHA or rate-limit the request; the mod then tries another configured provider. This is
+page scraping, not Google-account authentication or a Google Search API. Google's Custom Search JSON API is closed to new
+customers and is scheduled to end for existing customers on January 1, 2027.
+
+Brave Search needs an API key and SearXNG needs an instance address. Google Search and DuckDuckGo need no extra setup.
 
 Change automatic search in **Settings → Chat → Web search** (Automatic / Only when I ask / Off), or in the setup guide. The
 globe or **@Web** forces a search even when automatic search is Off. Fetched page text is not saved to history.
 
-Gemini API limits are set by Google per project and model. If Gemini still returns 429 after trying other eligible models,
-open **Check Gemini limits** in the error message to see the project's current quota in AI Studio. A quota at zero or already
-used for the day requires choosing a model with available quota or enabling Gemini API billing; retries cannot override it.
+Gemini API limits are set by Google per project and model. The sidebar retries temporary 429s and, when using the automatic
+Flash choice, tries another offered Flash model and then Flash-Lite. If the project quota is zero or exhausted, open
+**Check Gemini limits** in the error message; the sidebar cannot override Google's project limits.
 
 ## Context: drag things in
 
@@ -95,8 +103,9 @@ Drop onto the sidebar (a "Drop to add as context" overlay appears):
   Paste images straight into the box too.
 - **Selected text**: select text on the page and it appears as a Selection card, or right-click → *Ask Chat about selection*.
 
-The current page is attached automatically as the pill in the bottom row (click it to leave the page out). The **camera**
-attaches a screenshot as a *Capture* card (only models marked *Can read images* look at it). Up to 12 cards at a time.
+The current page starts as a context card above the chat box. It is greyed out when excluded from the first message. After
+that first message, it becomes a normal removable tab card for later messages. The **camera** attaches a screenshot as a
+*Capture* card (only models marked *Can read images* look at it). Up to 12 cards at a time.
 
 ## Chat
 
@@ -151,7 +160,7 @@ over the old one under its original name and restart.
 
 1. The sidebar only opens on a web page. On a new tab the URL bar icon is dimmed on purpose. Open a site first.
 2. Hover the URL bar: the chat icon appears on hover. No icon at all means the script isn't running: check the two Sine steps above.
-3. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see `[dia-sidebar] loaded v2.2.0`. A
+3. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see `[dia-sidebar] loaded v2.3.0`. A
    wrong script filename shows up as `[Sine]: Failed to load script`. If clicking the icon does nothing on a page, look for
    `[dia-sidebar] couldn't open the sidebar` and the error under it.
 
@@ -160,5 +169,5 @@ over the old one under its original name and restart.
 - Files: `dia-sidebar.uc.js` (logic + styles), `theme.json`, `preferences.json`, `chrome.css` (toolbar icon fallback).
 - The chat icon is Ionicons' "chatbubble-ellipses" (MIT), the same glyph Zen uses for its own chat icon.
 - Model API keys are stored as plain text in `dia-sidebar-models.json` in your Firefox profile, not in this repo. A Brave
-  Search API key is stored in Firefox preferences. Search queries go to the selected provider and, if it fails, any configured
-  fallback provider.
+  Search API key is stored in Firefox preferences. Search queries go to the selected provider, then Google/DuckDuckGo and any
+  configured Brave or SearXNG fallback.

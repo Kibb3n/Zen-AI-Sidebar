@@ -14,7 +14,7 @@
   const SEL_MSG = "dia-sidebar:selection";
   const MAX_CHARS = 24000;
   const MAX_REFS = 12;
-  const VERSION = "2.2.0";
+  const VERSION = "2.3.0";
   const DEFAULT_PROMPT = "Summarize this page into concise bullet points.";
   const SYSTEM =
     "You are an AI assistant living in a sidebar next to the web page the user is viewing. " +
@@ -165,6 +165,8 @@
   .dia-icon:hover { background: var(--soft); color: var(--fg); }
   .dia-icon:active { transform: scale(0.92); }
   .dia-webbtn.on { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }
+  .dia-webbtn { width: 34px; height: 34px; flex: none; border-radius: 50%; }
+  .dia-webbtn .dia-svg { width: 20px; height: 20px; stroke-width: 1.8; }
   .dia-head .dia-icon { width: 34px; height: 34px; border-radius: 12px; }
   .dia-head .dia-icon .dia-svg { width: 20px; height: 20px; }
   .dia-head .dia-layout { width: auto; padding: 0 6px 0 8px; display: inline-flex; align-items: center; gap: 1px; }
@@ -250,13 +252,18 @@
   .dia-act ul { margin: 0 0 10px; padding-inline-start: 18px; } .dia-act li { margin: 0 0 3px; }
   .dia-act-row { display: flex; gap: 6px; align-items: center; }
 
-  /* composer, like Dia: one big rounded card (capture cards, the box, then + / tab pill / camera / send) */
+  /* composer, like Dia: one big rounded card with context cards, the box, and attachment/search controls */
   .dia-foot { flex: none; padding: 6px 14px 14px; }
   .dia-composer { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 12px 12px 10px 14px; border: 1px solid var(--line); border-radius: 26px; background: var(--glass); backdrop-filter: blur(14px); transition: border-color 0.2s; }
   .dia-composer:focus-within { border-color: color-mix(in srgb, var(--fg) 28%, transparent); }
   .dia-cards { display: flex; flex-wrap: wrap; gap: 8px; max-height: min(196px, 24vh); overflow-y: auto; scrollbar-width: thin; }
   .dia-cards:empty { display: none; }
   .dia-card { position: relative; display: flex; align-items: center; gap: 12px; max-width: 100%; box-sizing: border-box; padding: 8px 36px 8px 8px; border-radius: 16px; background: var(--glass); animation: dia-in 0.25s var(--ease) both; }
+  .dia-card-static { padding-right: 10px; }
+  .dia-card.dia-off { opacity: 0.42; filter: grayscale(1); }
+  .dia-card.dia-page-toggle { cursor: pointer; transition: opacity 0.15s, filter 0.15s, background-color 0.15s; }
+  .dia-card.dia-page-toggle:hover { background: var(--soft); }
+  .dia-card.dia-page-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .dia-card-thumb { width: 38px; height: 48px; flex: none; border-radius: 9px; overflow: hidden; display: grid; place-items: center; background: var(--soft2); color: var(--mute); }
   .dia-card-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
   .dia-card-thumb img.dia-card-fav { width: 20px; height: 20px; object-fit: contain; border-radius: 4px; }
@@ -293,15 +300,6 @@
   .dia-row-right { display: flex; align-items: center; gap: 6px; flex: none; }
   .dia-add, .dia-cam { width: 34px; height: 34px; flex: none; border-radius: 50%; }
   .dia-add .dia-svg, .dia-cam .dia-svg { width: 20px; height: 20px; }
-  .dia-tabpill { appearance: none; display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; box-sizing: border-box; padding: 4px 16px 4px 5px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--fg) 22%, transparent); background: transparent; color: inherit; cursor: pointer; font-size: 14px; transition: background-color 0.15s, opacity 0.15s; }
-  .dia-tabpill:hover { background: var(--soft); }
-  .dia-tabpill[hidden] { display: none; }
-  .dia-tabpill.dia-off { opacity: 0.5; border-style: dashed; }
-  .dia-tabpill.dia-fixed { cursor: default; pointer-events: none; }
-  .dia-tabpill .dia-tabfav { width: 24px; height: 24px; flex: none; border-radius: 8px; background: var(--soft2); display: grid; place-items: center; overflow: hidden; color: var(--mute); }
-  .dia-tabpill .dia-tabfav img { width: 16px; height: 16px; border-radius: 4px; }
-  .dia-tabpill .dia-tabfav .dia-svg { width: 14px; height: 14px; }
-  .dia-tabpill > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dia-chip { appearance: none; border: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 5px 11px 5px 9px; border-radius: 999px; font-size: 13px; color: inherit; background: color-mix(in srgb, var(--accent) 20%, transparent); }
   .dia-chip[hidden] { display: none; }
   .dia-chip .dia-svg { width: 14px; height: 14px; color: var(--accent); }
@@ -474,7 +472,10 @@
   const allModels = () => [builtinModel(), ...store.models().map((m) => ({ ...m, base: normBase(m.base) }))];
   const activeModel = () => { const id = pref("activemodel", "apple"); return allModels().find((m) => m.id === id) || builtinModel(); };
   // "apple" = the small-context prompt layout (one flattened turn, tight caps); "openai" = normal multi-turn chat
-  const provider = () => (activeModel().type === "gemini" ? "gemini" : activeModel().small ? "apple" : "openai");
+  const provider = () => {
+    const m = activeModel();
+    return m.type === "gemini" ? "gemini" : m.type === "anthropic" ? "anthropic" : m.small ? "apple" : "openai";
+  };
   const geminiLabel = (id) => ({ flash: "Newest Flash (fast)", pro: "Newest Pro (smartest)", "flash-lite": "Newest Flash-Lite (cheapest)" })[id] || id;
   const modelSub = (m) => m.builtin ? `${m.model} · on this Mac` : m.type === "gemini" ? `${geminiLabel(m.model)} · Google` : `${m.model} · ${hostOf(m.base) || m.base}`;
   const apiKey = () => (activeModel().key || "").trim();
@@ -509,9 +510,9 @@
   const ABOUT_PAGE = /\b(this|the|that) (page|article|video|post|site|text|document|paper|thread|email|tab)\b|\bsummari[sz]e\b|\bproofread\b|\btranslate\b/i;
   const needsWeb = (t) => !!t && WEB_HINT.test(t) && (!ABOUT_PAGE.test(t) || /\b(search|look up|google|online)\b/i.test(t));
   const keepHistory = () => bool("history", pref("savehistory", "true") !== "false");
-  // Search provider settings. DuckDuckGo remains the no-key default; configured providers are
-  // also available as automatic fallbacks when a search endpoint is unavailable or rate-limited.
-  const searchEngine = () => ["duckduckgo", "brave", "searxng"].includes(pref("searchengine", "duckduckgo")) ? pref("searchengine", "duckduckgo") : "duckduckgo";
+  // Search provider settings. Google and DuckDuckGo need no API key; configured providers are
+  // tried as fallbacks when an endpoint is unavailable or rate-limited.
+  const searchEngine = () => ["duckduckgo", "google", "brave", "searxng"].includes(pref("searchengine", "duckduckgo")) ? pref("searchengine", "duckduckgo") : "duckduckgo";
   const searchSetup = (eng) => (eng === "brave" ? pref("searchkey", "") : pref("searxurl", "")).trim() || pref("searchsetup", "").trim();
   const STYLES = [
     "", // Low: the base prompt is already brief
@@ -1404,7 +1405,6 @@
     if (/^gemini-/.test(want)) return [want];
     const kind = /^(flash-lite|pro)$/.test(want) ? want : "flash";
     if (geminiAuto[kind]) return geminiAuto[kind];
-    const re = new RegExp(`^gemini-\\d+(?:\\.\\d+)?-${kind}$`);
     let list = [];
     try {
       const r = await fetchText(`${GEMINI_BASE}/models?pageSize=200`, { headers: { "x-goog-api-key": apiKey() } }, 8000, signal);
@@ -1412,16 +1412,26 @@
         list = (JSON.parse(r.text).models || [])
           .filter((m) => (m.supportedGenerationMethods || []).includes("generateContent"))
           .map((m) => String(m.name).replace(/^models\//, ""))
-          .filter((n) => re.test(n))
+          .filter((n) => /^gemini-\d+(?:\.\d+)?-(?:flash-lite|flash|pro)(?:-|$)/.test(n))
           .sort((x, y) => geminiVer(y) - geminiVer(x));
       }
     } catch (e) { if (e.name === "AbortError") throw e; }
-    if (!list.length) {
-      list = kind === "flash" ? ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash"]
-        : kind === "flash-lite" ? ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"]
-        : ["gemini-3.1-pro-preview", "gemini-2.5-pro"];
-    } else geminiAuto[kind] = list; // only cache a real answer from the API
-    return list;
+    if (list.length) {
+      const familyOf = (n) => (n.match(/^gemini-\d+(?:\.\d+)?-(flash-lite|flash|pro)(?:-|$)/) || [])[1];
+      const candidates = list.filter((n) => familyOf(n) === kind).slice(0, 2);
+      // Flash may fall back to the cheaper Flash-Lite family, but never silently upgrades to Pro.
+      if (kind === "flash") {
+        const lite = list.find((n) => familyOf(n) === "flash-lite");
+        if (lite) candidates.push(lite);
+      }
+      if (candidates.length) {
+        geminiAuto[kind] = candidates; // only cache model IDs actually offered to this API key
+        return candidates;
+      }
+    }
+    return kind === "flash" ? ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash"]
+      : kind === "flash-lite" ? ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"]
+      : ["gemini-3.1-pro-preview", "gemini-2.5-pro"];
   }
   // the models this key can chat with, newest first (also proves the key works)
   async function geminiList(key) {
@@ -1485,7 +1495,7 @@
           if (e.name === "AbortError" || got) throw e;
           const m = String(e.message || "");
           if (useThink && /thinking|thought/i.test(m)) { useThink = false; continue; } // this model doesn't take that setting
-          if (e.status === 429 && autoChoice && ci < Math.min(cands.length - 1, 2)) {
+          if (e.status === 429 && autoChoice && ci < cands.length - 1) {
             yield { t: "status", d: `${mid} is rate-limited; trying another Gemini model…` };
             lastErr = e;
             break;
@@ -1593,6 +1603,39 @@
       return { ok: res.ok, status: res.status, ctype: res.headers?.get?.("content-type") || "", text: await res.text() };
     } finally { clearTimeout(timer); signal?.removeEventListener("abort", onAbort); }
   }
+  let googleSearchLastAt = 0;
+  async function googleWebSearch(q, signal) {
+    const gap = 3500 - (Date.now() - googleSearchLastAt);
+    if (gap > 0) await waitForRetry(gap, signal);
+    googleSearchLastAt = Date.now();
+    // Google serves localized HTML here, so use the signed-in browser session when available.
+    // Keep requests deliberately spaced; Google can still challenge automated requests with a CAPTCHA.
+    const r = await fetchText(`https://www.google.com/search?q=${encodeURIComponent(q)}&num=8`, {
+      credentials: "include", headers: { Accept: "text/html,application/xhtml+xml" },
+    }, 10000, signal);
+    if (!r.ok) throw new Error("Google Search returned " + r.status);
+    const doc = new DOMParser().parseFromString(r.text, "text/html");
+    const results = [];
+    for (const a of doc.querySelectorAll("a")) {
+      const h3 = a.querySelector("h3");
+      if (!h3) continue;
+      let href = a.getAttribute("href") || "";
+      try {
+        const u = new URL(href, "https://www.google.com");
+        if (/google\.[^/]+$/i.test(u.hostname) && u.pathname === "/url") href = u.searchParams.get("q") || u.searchParams.get("url") || "";
+        else href = u.href;
+      } catch { continue; }
+      if (!/^https?:\/\//i.test(href)) continue;
+      let host = "";
+      try { host = new URL(href).hostname; } catch { continue; }
+      if (/(^|\.)google(?:\.[a-z0-9-]+)+$/i.test(host) || /(^|\.)googleusercontent\.com$/i.test(host)) continue;
+      const box = a.closest("div.MjjYud, div.g, [data-sokoban-container]") || a.parentElement?.parentElement;
+      const snippet = box?.querySelector(".VwiC3b, [data-sncf], .aCOpRe")?.textContent?.trim() || "";
+      if (!results.some((x) => x.url === href)) results.push({ title: h3.textContent.trim(), url: href, snippet });
+      if (results.length >= 8) break;
+    }
+    return results;
+  }
   const stripTags = (s) => (s || "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').trim();
   function htmlToText(html) {
     const doc = new DOMParser().parseFromString(html, "text/html");
@@ -1603,8 +1646,9 @@
   async function webSearch(q, signal) {
     const enc = encodeURIComponent(q);
     const preferred = searchEngine();
-    const ready = { duckduckgo: true, brave: !!searchSetup("brave"), searxng: !!searchSetup("searxng") };
-    const order = [preferred, ...["duckduckgo", "brave", "searxng"].filter((x) => x !== preferred && ready[x])];
+    const ready = { duckduckgo: true, google: true, brave: !!searchSetup("brave"), searxng: !!searchSetup("searxng") };
+    const order = [preferred, ...["duckduckgo", "google", "brave", "searxng"].filter((x) => x !== preferred && ready[x])];
+    const label = (eng) => ({ duckduckgo: "DuckDuckGo", google: "Google Search", brave: "Brave Search", searxng: "SearXNG" })[eng] || eng;
     const errors = [];
     for (const eng of order) {
       if (!ready[eng]) {
@@ -1623,6 +1667,8 @@
           const r = await fetchText(`${base}/search?q=${enc}&format=json`, {}, 9000, signal);
           if (!r.ok) throw new Error("SearXNG returned " + r.status + " (JSON output must be enabled on the instance)");
           results = (JSON.parse(r.text).results || []).map((x) => ({ title: x.title || "", url: x.url, snippet: x.content || "" }));
+        } else if (eng === "google") {
+          results = await googleWebSearch(q, signal);
         } else {
           const r = await fetchText(`https://html.duckduckgo.com/html/?q=${enc}`, {}, 9000, signal);
           if (!r.ok) throw new Error("DuckDuckGo returned " + r.status);
@@ -1641,10 +1687,10 @@
         }
         results = results.filter((r) => /^https?:\/\//.test(r.url)).slice(0, 6);
         if (results.length) return results;
-        errors.push(`${eng === "duckduckgo" ? "DuckDuckGo" : eng === "brave" ? "Brave Search" : "SearXNG"} returned no results (possibly rate-limited)`);
+        errors.push(`${label(eng)} returned no results (possibly rate-limited or challenged)`);
       } catch (e) {
         if (e.name === "AbortError") throw e;
-        errors.push(`${eng === "duckduckgo" ? "DuckDuckGo" : eng === "brave" ? "Brave Search" : "SearXNG"}: ${String(e.message || e).slice(0, 140)}`);
+        errors.push(`${label(eng)}: ${String(e.message || e).slice(0, 140)}`);
       }
     }
     throw new Error("Web search failed. " + errors.join("; ") + ". Check the search settings or try again.");
@@ -1965,7 +2011,7 @@
 
   // a context card, like Dia's: picture (or icon) + title + a small subtitle (Capture, File, the site…)
   function card(d, onRemove) {
-    const el = h("div", { className: "dia-card" + (d.locked ? " dia-locked" : ""), title: d.tip || d.label || "" });
+    const el = h("div", { className: "dia-card" + (d.locked ? " dia-locked" : "") + (!onRemove ? " dia-card-static" : ""), title: d.tip || d.label || "" });
     const thumb = h("div", { className: "dia-card-thumb" });
     if (d.thumb) thumb.append(h("img", { src: d.thumb }));
     else if (d.image) thumb.append(h("img", { className: "dia-card-fav", src: d.image, onerror: (e) => e.target.replaceWith(icon(d.ico || "page")) }));
@@ -2052,9 +2098,9 @@
 
   // ---------- per-tab session ----------
   function makeSession(src) {
-    let panel, logEl, input, sendBtn, pillsEl, cardsEl, tabPillEl, webBtnEl, composerEl, titleEl, modelBtnEl, sheetEl = null, hmenuEl = null, hmenuKind = "";
+    let panel, logEl, input, sendBtn, pillsEl, cardsEl, webBtnEl, composerEl, titleEl, modelBtnEl, sheetEl = null, hmenuEl = null, hmenuKind = "";
     let started = false, busy = false, generating = false, stopped = false, closed = false, userHidden = false, wantFocus = false;
-    let page = null, convo = [], refs = [], ctrl = null, gen = 0, refSeq = 0, chatId = null, chatTitle = "";
+    let page = null, convo = [], refs = [], ctrl = null, gen = 0, refSeq = 0, chatId = null, chatTitle = "", pageRefPromoted = false;
     let usePage = true, skill = null, formats = [], manage = false, webOn = false; // webOn: the globe button
     let queue = [], drainAfter = false, tabSnap = [], lastKey = "";
     let members = [src]; // all tabs this chat spans — >1 when opened over a split view
@@ -2126,31 +2172,32 @@
       return { url, label, image: src.image };
     };
 
-    // the current page, shown as a pill in the bottom row: its site name and icon. Click to leave it out.
-    function renderTabPill(pd) {
-      if (!tabPillEl) return;
-      const show = !!pd && !(page && page.none);
-      tabPillEl.hidden = !show;
-      if (!show) return;
-      const host = hostOf(pd.url) || pd.label;
-      tabPillEl.classList.toggle("dia-off", !usePage && !started);
-      tabPillEl.classList.toggle("dia-fixed", started);
-      tabPillEl.title = started ? pd.label : usePage ? "This page is used as context. Click to leave it out." : "Click to use this page as context";
-      const fav = h("span", { className: "dia-tabfav" });
-      if (pd.image) fav.append(h("img", { src: pd.image, onerror: (e) => e.target.replaceWith(icon("page")) })); else fav.append(icon("page"));
-      tabPillEl.replaceChildren(fav, h("span", { textContent: host }));
+    // The current page starts as a toggle card. Once the first send has captured the page,
+    // it becomes an ordinary removable tab attachment for the next message.
+    function currentPageCard(pd) {
+      const el = card({ label: pd.label, sub: hostOf(pd.url) || "Current page", image: pd.image, ico: "page", tip: pd.url }, null);
+      el.classList.add("dia-page-toggle");
+      el.classList.toggle("dia-off", !usePage);
+      el.setAttribute("role", "button");
+      el.setAttribute("tabindex", "0");
+      el.setAttribute("aria-pressed", String(usePage));
+      el.title = usePage ? "This page is included in the first message. Click to leave it out." : "This page is left out of the first message. Click to include it.";
+      const toggle = () => { if (!started) { usePage = !usePage; renderPills(); } };
+      el.addEventListener("click", toggle);
+      el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+      return el;
     }
     function renderPills() {
       if (!pillsEl) return;
       const els = [];
       const pd = pageData();
-      cardsEl.replaceChildren(...refs.map((r) => card(refMeta(r), r.locked ? null : () => { refs = refs.filter((x) => x.id !== r.id); renderPills(); })));
+      cardsEl.replaceChildren(...(!started && pd ? [currentPageCard(pd)] : []), ...refs.map((r) => card(refMeta(r), r.locked ? null : () => { refs = refs.filter((x) => x.id !== r.id); renderPills(); })));
       if (skill) els.push(pill({ label: skill.name, ico: "spark" }, () => { skill = null; renderPills(); }, "dia-skillpill"));
       for (const f of formats) els.push(pill({ label: "@" + f.name, ico: "edit", tip: f.hint }, () => { formats = formats.filter((x) => x !== f); renderPills(); }));
       if (manage) els.push(pill({ label: "Manage tabs", ico: "folder" }, () => { manage = false; renderPills(); }));
       pillsEl.replaceChildren(...els);
-      renderTabPill(pd);
-      if (input) input.placeholder = isVid() && usePage ? "Ask a question about this video..." : usePage && pd ? "Ask a question about this page..." : "Ask anything...";
+      const hasPageContext = started ? refs.some((r) => r.pageSource) : usePage;
+      if (input) input.placeholder = isVid() && hasPageContext ? "Ask a question about this video..." : hasPageContext && pd ? "Ask a question about this page..." : "Ask anything...";
       updateSend();
       updateWebBtn();
     }
@@ -2496,20 +2543,23 @@
     // real multi-turn history. Apple's tiny on-device model ignores history, so it gets one flattened turn.
     function buildRequest(resuming, webCtx, deep) {
       const lastU = [...convo].reverse().find((m) => m.role === "user");
+      const firstU = convo.find((m) => m.role === "user");
+      const firstTurn = lastU === firstU;
+      const includePage = !!(page && !page.none && (firstTurn ? lastU?.pageContext !== false : !pageRefPromoted));
       const req = lastU?.content || pref("prompt", DEFAULT_PROMPT);
-      let ctx = page && !page.none ? pageCtx() : "";
+      let ctx = includePage ? pageCtx() : "";
       // On YouTube every transcript line is prefixed with its [mm:ss] stamp (so "Key moments" can cite
       // times). For anything not about timing, strip them so the model doesn't echo them.
-      if (page?.youtube && !/\btimestamp|\bmoment|\bchapter|time ?code|mm:ss|\bjump to\b/i.test(req)) {
+      if (includePage && page?.youtube && !/\btimestamp|\bmoment|\bchapter|time ?code|mm:ss|\bjump to\b/i.test(req)) {
         ctx = ctx.replace(/^\[\d{1,2}:\d{2}(?::\d{2})?\]\s*/gm, "").replace(/ \(each line is prefixed with its \[mm:ss\] timestamp\)/, "");
       }
-      const pageBlock = page && !page.none ? `=== PAGE THE USER IS VIEWING ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${ctx}` : "";
+      const pageBlock = includePage ? `=== PAGE THE USER IS VIEWING ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${ctx}` : "";
       if (provider() === "apple") {
         const upto = resuming ? convo : convo.slice(0, convo.lastIndexOf(lastU));
         const transcript = upto.slice(-2).map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${(m.label || m.content).slice(0, 500)}`).join("\n");
         const fit = (text, limit) => text.length <= limit ? text : text.slice(0, limit - 44) + "\n[…context shortened for the on-device model]";
         const budget = webCtx ? 3000 : 4200;
-        const pageContext = deep ? fit(`=== PAGE THE USER IS VIEWING (notes from reading all of it) ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${deep}`, budget) : fit(pageBlock, budget);
+        const pageContext = includePage ? (deep ? fit(`=== PAGE THE USER IS VIEWING (notes from reading all of it) ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${deep}`, budget) : fit(pageBlock, budget)) : "";
         const webContext = webCtx ? fit(webCtx.text, 1800) : "";
         const ask = resuming ? "Continue your previous answer exactly where it stopped, without repeating it." : userText(lastU || { content: req }, true);
         return {
@@ -2776,10 +2826,12 @@
           // questions that are plainly about the page itself never need a search, so skip the extra routing call
           const askText = lastU?.label || lastU?.content || "";
           const skipRouter = !lastU?.web && !heur && (askText.trim().length < 6 || ABOUT_PAGE.test(askText));
+          const firstU = convo.find((m) => m.role === "user");
+          const searchPage = ((lastU === firstU && lastU?.pageContext === false) || (lastU !== firstU && pageRefPromoted)) ? null : page;
           const runFallback = async () => {
             if (skipRouter) return;
             try {
-              const q = await planSearch(convo, page, !!lastU?.web || heur, signal);
+              const q = await planSearch(convo, searchPage, !!lastU?.web || heur, signal);
               if (q) {
                 const cap = provider() === "apple" ? 900 : 3500;
                 setStatus(`Searching the web for “${q}”…`);
@@ -2800,7 +2852,7 @@
           if (wantsSearch && (!isNative() || searchBroken.has(provider()))) await runFallback();
           // High effort on the small on-device model: read the whole page in parts, keep notes for this question
           let deep = null;
-          if (provider() === "apple" && effort() >= 3 && !prior && page && !page.none && page.text.length > chunkSize() * 1.3) {
+          if (provider() === "apple" && effort() >= 3 && !prior && lastU === firstU && lastU?.pageContext !== false && page && !page.none && page.text.length > chunkSize() * 1.3) {
             try { deep = (await deepRead(lastU?.content || pref("prompt", DEFAULT_PROMPT), page.text, signal, (i, n) => setStatus(`Reading the page in parts (${i}/${n})…`))) || null; }
             catch (e) { if (e.name === "AbortError") throw e; deep = null; }
             clearStatus();
@@ -2925,6 +2977,15 @@
         page = await getPageText(src.linkedBrowser);
       } catch (e) {
         if (closed || my !== gen) return;
+        if (entry.pageContext === false) {
+          page = { none: true, title: "", url: "", text: "" };
+          pageRefPromoted = true;
+          status.remove();
+          convo.push(entry);
+          renderPills();
+          generate();
+          return;
+        }
         const msg = e.noCaptions
           ? "This video has no captions available, so there's no transcript to read."
           : `Couldn't read this ${ytId(url) ? "video" : "page"}: ${e.message}`;
@@ -2940,6 +3001,12 @@
         if (page.text.length > size) status.textContent = "Condensing…";
         page.context = pageCtx();
       } catch (e) { page.context = page.text.slice(0, chunkSize()); }
+      pageRefPromoted = true;
+      if (!refs.some((r) => r.pageSource)) {
+        const pd = pageData() || { label: page.title || page.url, image: src.image };
+        refs.push({ id: ++refSeq, kind: "tab", pageSource: true, label: page.title || pd.label, url: page.url || url, image: pd.image, text: page.text });
+      }
+      renderPills();
       status.remove();
       convo.push(entry);
       generate();
@@ -2974,17 +3041,19 @@
     }
     function dispatch(snap) {
       logEl.querySelector(".dia-empty")?.remove();
-      const pageAtt = !started && snap.usePage ? pageData() : null;
+      const firstMessage = !started;
+      const pageAtt = firstMessage && snap.usePage ? pageData() : null;
       started = true;
-      const entry = { role: "user", content: snap.q, label: snap.label, refs: snap.refs, formats: snap.formats.map((f) => f.id), manage: snap.manage, web: snap.web, fromSkill: snap.fromSkill };
+      const entry = { role: "user", content: snap.q, label: snap.label, refs: snap.refs, formats: snap.formats.map((f) => f.id), manage: snap.manage, web: snap.web, fromSkill: snap.fromSkill, pageContext: firstMessage ? !!snap.usePage : undefined };
       logEl.append(userMsg(entry, pageAtt));
       if (!chatTitle) { chatTitle = snap.label.slice(0, 60); updateTitle(); }
       if (snap.manage) tabSnap = snapshotTabs();
       renderPills();
       scrollDown(true);
-      if (!page) {
-        if (snap.usePage) { startFirst(entry); return; }
-        page = { none: true, title: "", url: "", text: "" }; // chatting without a page
+      if (firstMessage && !page) {
+        if (srcUrl()) { startFirst(entry); return; }
+        page = { none: true, title: "", url: "", text: "" };
+        pageRefPromoted = true;
         renderPills();
       }
       convo.push(entry);
@@ -3001,7 +3070,7 @@
         id: chatId, ts: Date.now(), title: chatTitle || "Chat", url: page?.url || srcUrl() || "",
         page: page && !page.none ? { title: page.title, url: page.url, text: page.text.slice(0, 20000), youtube: !!page.youtube, seconds: page.seconds, chapters: page.chapters } : null,
         msgs: convo.map((m) => m.role === "user"
-          ? { role: "user", content: m.content, label: m.label, formats: m.formats, refs: (m.refs || []).map(strip) }
+          ? { role: "user", content: m.content, label: m.label, formats: m.formats, refs: (m.refs || []).map(strip), pageContext: m.pageContext }
           : { role: "assistant", content: m.content, sources: m.sources, queries: m.queries, numbered: m.numbered }),
       });
     }
@@ -3012,6 +3081,10 @@
       page = c.page ? { ...c.page } : { none: true, title: "", url: "", text: "" };
       if (page.text) page.context = condense(page.text, chunkSize());
       convo = c.msgs.map((m) => ({ ...m }));
+      pageRefPromoted = convo.some((m) => m.role === "user" && m.pageContext !== undefined);
+      if (pageRefPromoted && !page.none) {
+        refs.push({ id: ++refSeq, kind: "tab", pageSource: true, label: page.title || hostOf(page.url), url: page.url, image: src.image, text: page.text });
+      }
       started = true;
       const seek = page.youtube && ytId(page.url) === ytId(srcUrl() || "") ? (s) => seekVideo(src.linkedBrowser, s) : null;
       for (const m of convo) {
@@ -3243,51 +3316,82 @@
         h("div", { className: "dia-edit-row" }, h("button", { className: "dia-btn", textContent: "Cancel", onclick: cancel }), save)));
       key.focus();
     }
-    // any other OpenAI-compatible server
-    function renderCustomForm(body, m, done, cancel) {
-      const name = h("input", { type: "text", value: m?.name || "", placeholder: "e.g. Llama 3.1 (Ollama)" });
-      const base = h("input", { type: "text", value: m?.base || "", placeholder: "http://localhost:11434/v1" });
-      const mid = h("input", { type: "text", value: m?.model || "", placeholder: "Model ID, e.g. llama3.1:8b" });
-      const key = h("input", { type: "password", value: m?.key || "", placeholder: "Only if the server needs one" });
-      const small = h("input", { type: "checkbox", checked: !!m?.small });
-      const vision = h("input", { type: "checkbox", checked: !!m?.vision });
-      const reasoning = h("input", { type: "checkbox", checked: !!m?.reasoning });
+    // Common model form for direct provider APIs and OpenAI-compatible servers.
+    function renderCustomForm(body, m, done, cancel, preset = {}) {
+      const type = m?.type || preset.type || "openai";
+      const name = h("input", { type: "text", value: m?.name || preset.name || "", placeholder: "e.g. Llama 3.1 (Ollama)" });
+      const base = h("input", { type: "text", value: m?.base || preset.base || "", placeholder: "http://localhost:11434/v1", disabled: type === "anthropic" });
+      const mid = h("input", { type: "text", value: m?.model || preset.model || "", placeholder: preset.model ? `Default: ${preset.model}` : "Choose from the model list" });
+      const key = h("input", { type: "password", value: m?.key || preset.key || "", placeholder: type === "anthropic" || preset.requiresKey ? "Paste your API key" : "Only if the server needs one" });
+      const small = h("input", { type: "checkbox", checked: m ? !!m.small : !!preset.small });
+      const vision = h("input", { type: "checkbox", checked: m ? !!m.vision : !!preset.vision });
+      const reasoning = h("input", { type: "checkbox", checked: m ? !!m.reasoning : !!preset.reasoning });
       const status = h("div", { className: "dia-note" });
       const found = h("div", { className: "dia-found" });
-      const find = h("button", { className: "dia-btn", textContent: "Find models", title: "Ask the server which models it offers", onclick: async () => {
+      const find = h("button", { className: "dia-btn", textContent: "Find models", title: "List models available to this API key or server", onclick: async () => {
         const b = normBase(base.value);
         if (!/^https?:\/\//i.test(b)) { base.focus(); status.textContent = "Enter the server address first (starting with http:// or https://)."; return; }
+        if ((type === "anthropic" || preset.requiresKey) && !key.value.trim()) { key.focus(); status.textContent = "Paste your API key first."; return; }
         find.disabled = true; status.textContent = "Looking…"; found.replaceChildren();
         try {
           const k = key.value.trim();
-          const j = JSON.parse(await httpGet(b + "/models", k ? { authorization: `Bearer ${k}`, "x-api-key": k } : {}));
+          const headers = type === "anthropic"
+            ? { "x-api-key": k, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" }
+            : k ? { authorization: `Bearer ${k}`, "x-api-key": k } : {};
+          const url = type === "anthropic" ? b + "/models?limit=1000" : b + "/models";
+          const j = JSON.parse(await httpGet(url, headers));
           const ids = (Array.isArray(j) ? j : j.data || j.models || []).map((x) => (typeof x === "string" ? x : x.id || x.name || x.model)).filter(Boolean).slice(0, 80);
-          status.textContent = ids.length ? "Tap one to use it:" : "That server didn't list any models. Type the model ID yourself.";
-          found.replaceChildren(...ids.map((id) => h("button", { className: "dia-chip", textContent: id, title: id, onclick: () => { mid.value = id; if (!name.value.trim()) name.value = id; } })));
-        } catch (e) { status.textContent = "Couldn't list models from that server (" + String(e.message || e).slice(0, 120) + "). You can still type the model ID yourself."; }
+          status.textContent = ids.length ? "Tap a model to use it:" : "No models were listed. Type a model ID yourself.";
+          found.replaceChildren(...ids.map((id) => h("button", { className: "dia-chip", textContent: id, title: id, onclick: () => { mid.value = id; if (!name.value.trim()) name.value = preset.name || id; } })));
+        } catch (e) { status.textContent = "Couldn't list models (" + String(e.message || e).slice(0, 120) + "). You can still type a model ID yourself."; }
         find.disabled = false;
       } });
       const save = h("button", { className: "dia-btn dia-primary", textContent: "Save model", onclick: async () => {
-        const b = normBase(base.value), mi = mid.value.trim();
+        const b = normBase(base.value), mi = mid.value.trim(), k = key.value.trim();
         if (!/^https?:\/\//i.test(b)) { base.focus(); status.textContent = "The server address must start with http:// or https://."; return; }
-        if (!mi) { mid.focus(); status.textContent = "Enter the model ID (or use Find models)."; return; }
-        const entry = { id: m?.id || "m" + Date.now().toString(36), name: (name.value.trim() || mi).slice(0, 40), base: b, model: mi, key: key.value.trim(), small: small.checked, vision: vision.checked, reasoning: reasoning.checked };
+        if (!mi) { mid.focus(); status.textContent = "Choose a model or enter its model ID."; return; }
+        if ((type === "anthropic" || preset.requiresKey) && !k) { key.focus(); status.textContent = "Paste your API key first."; return; }
+        const entry = { id: m?.id || "m" + Date.now().toString(36), type, name: (name.value.trim() || mi).slice(0, 40), base: b, model: mi, key: k, small: small.checked, vision: vision.checked, reasoning: reasoning.checked };
         await saveModel(entry);
         done(entry);
       } });
+      const notes = [];
+      if (preset.description) notes.push(h("div", { className: "dia-onb-sub", textContent: preset.description }));
+      if (preset.keyUrl) notes.push(h("div", { className: "dia-edit-row" }, h("button", { className: "dia-btn", textContent: preset.keyLabel || "Get an API key", onclick: () => openLink(preset.keyUrl) })));
       body.replaceChildren(h("div", { className: "dia-form" },
+        ...notes,
         h("label", { textContent: "Name" }), name,
-        h("label", { textContent: "Server address (OpenAI-compatible)" }), base,
-        h("label", { textContent: "Model ID" }), mid,
+        h("label", { textContent: type === "anthropic" ? "Anthropic API" : "Server address (OpenAI-compatible)" }), base,
+        h("label", { textContent: "Model" }), mid,
         h("div", { className: "dia-edit-row" }, find), status, found,
         h("label", { textContent: "API key" }), key,
-        h("label", { className: "dia-check" }, small, h("span", { textContent: "Small context window (tick for on-device or local models limited to about 4K tokens)" })),
+        h("label", { className: "dia-check" }, small, h("span", { textContent: "Small context window (for on-device or local models limited to about 4K tokens)" })),
         h("label", { className: "dia-check" }, vision, h("span", { textContent: "Can read images" })),
-        h("label", { className: "dia-check" }, reasoning, h("span", { textContent: "Reasoning model (sends the Effort setting to it)" })),
-        h("div", { className: "dia-note", textContent: "Saved in your Firefox profile folder, not sent anywhere except to this server." }),
+        ...(type === "anthropic" ? [] : [h("label", { className: "dia-check" }, reasoning, h("span", { textContent: "Reasoning model (sends the Effort setting to it)" }))]),
+        h("div", { className: "dia-note", textContent: "The key is saved in your Firefox profile and sent only to this provider." }),
         h("div", { className: "dia-edit-row" }, h("button", { className: "dia-btn", textContent: "Cancel", onclick: cancel }), save)));
       name.focus();
     }
+    const CLAUDE_PRESET = {
+      type: "anthropic", name: "Claude", base: "https://api.anthropic.com", vision: true, requiresKey: true,
+      keyUrl: "https://console.anthropic.com/settings/keys", keyLabel: "Get a Claude API key",
+      description: "Connect with an Anthropic API key, then list the Claude models available to your account.",
+    };
+    const OPENAI_PRESET = {
+      type: "openai", name: "OpenAI / ChatGPT API", base: "https://api.openai.com/v1", requiresKey: true,
+      keyUrl: "https://platform.openai.com/api-keys", keyLabel: "Get an OpenAI API key",
+      description: "Use the OpenAI API with a platform API key. A ChatGPT subscription by itself is not an API key.",
+    };
+    const DEEPSEEK_PRESET = {
+      type: "openai", name: "DeepSeek", base: "https://api.deepseek.com/v1", model: "deepseek-flash", requiresKey: true,
+      keyUrl: "https://platform.deepseek.com/api_keys", keyLabel: "Get a DeepSeek API key",
+      description: "The current DeepSeek Flash model is prefilled; use Find models to see the models enabled for your key.",
+    };
+    const OLLAMA_PRESET = {
+      type: "openai", name: "Ollama", base: "http://localhost:11434/v1",
+      keyUrl: "https://ollama.com/download", keyLabel: "Get Ollama",
+      description: "Start Ollama on this Mac, then use Find models to select a model you have pulled locally.",
+    };
 
     // ----- model manager sheet -----
     function openModels() {
@@ -3309,14 +3413,18 @@
         const mine = allModels().filter((m) => !m.builtin);
         body.replaceChildren(
           h("div", { className: "dia-seg" },
-            h("button", { className: "dia-btn", textContent: "＋ Add Gemini", onclick: () => renderGeminiForm(body, null, paint, paint) }),
-            h("button", { className: "dia-btn", textContent: "＋ Add another model", onclick: () => renderCustomForm(body, null, paint, paint) })),
+            h("button", { className: "dia-btn", textContent: "＋ Gemini", onclick: () => renderGeminiForm(body, null, paint, paint) }),
+            h("button", { className: "dia-btn", textContent: "＋ Claude", onclick: () => renderCustomForm(body, null, paint, paint, CLAUDE_PRESET) }),
+            h("button", { className: "dia-btn", textContent: "＋ OpenAI / ChatGPT", onclick: () => renderCustomForm(body, null, paint, paint, OPENAI_PRESET) }),
+            h("button", { className: "dia-btn", textContent: "＋ DeepSeek", onclick: () => renderCustomForm(body, null, paint, paint, DEEPSEEK_PRESET) }),
+            h("button", { className: "dia-btn", textContent: "＋ Ollama", onclick: () => renderCustomForm(body, null, paint, paint, OLLAMA_PRESET) }),
+            h("button", { className: "dia-btn", textContent: "＋ Other", onclick: () => renderCustomForm(body, null, paint, paint) })),
           h("div", { className: "dia-menu-sep", textContent: "Your models" }),
-          ...(mine.length ? mine.map(row) : [h("div", { className: "dia-note", textContent: "Nothing yet. Add Gemini with just an API key, or any OpenAI-compatible server (Ollama, LM Studio, OpenRouter, OpenAI…). Then switch between models from the top of the sidebar." })]),
+          ...(mine.length ? mine.map(row) : [h("div", { className: "dia-note", textContent: "Nothing yet. Choose a provider above, or connect any OpenAI-compatible server. Then switch models from the top of the sidebar." })]),
           h("div", { className: "dia-menu-sep", textContent: "Built in" }),
           row(builtinModel()));
       };
-      const edit = (m) => (m.type === "gemini" ? renderGeminiForm : renderCustomForm)(body, m, paint, paint);
+      const edit = (m) => m.type === "gemini" ? renderGeminiForm(body, m, paint, paint) : renderCustomForm(body, m, paint, paint, m.type === "anthropic" ? CLAUDE_PRESET : {});
       paint();
     }
 
@@ -3346,7 +3454,11 @@
       pickStep = () => body.replaceChildren(dots(1), hero("Choose your AI"), sub("You can add more later and switch between them."),
         card("Apple Intelligence", "Private and free. Runs on this Mac through AFM Server.", () => afmStep()),
         card("Google Gemini", "Fast and capable. Needs a free API key from Google AI Studio.", () => renderGeminiForm(body, null, (entry) => modelAddedStep(entry), () => pickStep())),
-        card("Something else", "Ollama, LM Studio, OpenRouter, OpenAI… any OpenAI-compatible server.", () => renderCustomForm(body, null, (entry) => modelAddedStep(entry), () => pickStep())),
+        card("Claude", "Connect directly with an Anthropic API key and choose from the Claude models available to you.", () => renderCustomForm(body, null, (entry) => modelAddedStep(entry), () => pickStep(), CLAUDE_PRESET)),
+        card("OpenAI · ChatGPT API", "Use an OpenAI platform API key and list the models available to it.", () => renderCustomForm(body, null, (entry) => modelAddedStep(entry), () => pickStep(), OPENAI_PRESET)),
+        card("DeepSeek", "A ready-to-use DeepSeek API setup with model discovery.", () => renderCustomForm(body, null, (entry) => modelAddedStep(entry), () => pickStep(), DEEPSEEK_PRESET)),
+        card("Ollama", "Run models locally on this Mac. No cloud API key needed.", () => renderCustomForm(body, null, (entry) => modelAddedStep(entry), () => pickStep(), OLLAMA_PRESET)),
+        card("Other compatible model", "LM Studio, OpenRouter, or another OpenAI-compatible server.", () => renderCustomForm(body, null, (entry) => modelAddedStep(entry), () => pickStep())),
         ...(store.models().length ? [h("div", { className: "dia-note", textContent: "Added: " + store.models().map((m) => m.name).join(", ") })] : []),
         nav(btn("Back", welcome), btn("Continue", () => prefsStep(), true)));
       afmStep = () => {
@@ -3389,7 +3501,7 @@
       ctrl?.abort();
       gen++;
       page = null; convo = []; refs = []; queue = []; started = false; generating = false;
-      chatId = null; chatTitle = ""; usePage = !!srcUrl() && bool("attachpage", true); skill = null; formats = []; manage = false; webOn = false;
+      chatId = null; chatTitle = ""; pageRefPromoted = false; usePage = !!srcUrl() && bool("attachpage", true); skill = null; formats = []; manage = false; webOn = false;
       closePop(); closeHMenu(); closeSheet(); clearNote();
       if (input) { input.value = ""; autosize(); }
       logEl.replaceChildren();
@@ -3407,7 +3519,7 @@
 
     // Called on any top-level navigation in the source tab (including YouTube's in-page video
     // switches). A different page/video starts a fresh chat (the old one stays in History);
-    // otherwise just refresh the page pill.
+    // otherwise just refresh the page attachment card.
     function refreshAttach() { if (closed) return; if (!started) renderPills(); else updateWebBtn(); }
     function onNav() {
       if (closed) return;
@@ -3457,14 +3569,13 @@
       sendBtn = h("button", { className: "dia-send", onclick: () => (busy && !hasContent() ? stop() : submit()) });
       sendBtn.addEventListener("mousedown", (e) => e.preventDefault()); // keep typing focus in the box after sending
       const addBtn = h("button", { className: "dia-icon dia-add", title: "Attach files, add tabs, Skills", onclick: (e) => { e.stopPropagation(); plusMenu(); } }, icon("plus"));
-      tabPillEl = h("button", { className: "dia-tabpill", hidden: true, onclick: () => { if (started) return; usePage = !usePage; renderPills(); } });
       webBtnEl = h("button", { className: "dia-icon dia-webbtn", title: "Force web search for this chat (works with AFM).", onclick: () => setWeb(!webOn) }, icon("globe"));
       webBtnEl.setAttribute("aria-label", "Toggle web search");
       webBtnEl.setAttribute("aria-pressed", "false");
       const camBtn = h("button", { className: "dia-icon dia-cam", title: "Capture this page", onclick: () => addCapture() }, icon("camera"));
-      for (const b of [addBtn, tabPillEl, webBtnEl, camBtn]) b.addEventListener("mousedown", (e) => e.preventDefault()); // keep typing focus in the box
+      for (const b of [addBtn, webBtnEl, camBtn]) b.addEventListener("mousedown", (e) => e.preventDefault()); // keep typing focus in the box
       composerEl = h("div", { className: "dia-composer" }, cardsEl, pillsEl, input,
-        h("div", { className: "dia-row" }, h("div", { className: "dia-row-left" }, addBtn, tabPillEl, webBtnEl), h("div", { className: "dia-row-right" }, camBtn, sendBtn)));
+        h("div", { className: "dia-row" }, h("div", { className: "dia-row-left" }, addBtn, webBtnEl), h("div", { className: "dia-row-right" }, camBtn, sendBtn)));
       const dropzone = h("div", { className: "dia-dropzone" }, icon("drop"), h("span", { textContent: "Drop to add as context" }), h("small", { textContent: "Files, tabs or tab groups" }));
       panel = h("div", { className: "dia-panel", hidden: true }, head, logEl, h("div", { className: "dia-foot" }, composerEl), dropzone);
       // drag files, tabs (from the tab strip or Zen's sidebar) or whole tab groups onto the sidebar

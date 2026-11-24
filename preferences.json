@@ -36,6 +36,7 @@
     "placeholder": false,
     "options": [
       { "label": "DuckDuckGo", "value": "duckduckgo" },
+      { "label": "Google Search", "value": "google" },
       { "label": "Brave Search", "value": "brave" },
       { "label": "SearXNG", "value": "searxng" }
     ]
