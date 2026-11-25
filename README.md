@@ -6,9 +6,25 @@ your tab sidebar** and follows it if you move your tabs to the other side. It st
 macOS) and only hides when a page itself goes fullscreen, such as a video.
 
 It looks like Dia's sidebar: a bare header (new chat and the **model picker** on the left, a menu and close on the right), a
-blank empty chat, and one big rounded composer with your context cards, the box, and a bottom row with **+**, a **globe** to
-force web search, a **camera** and a round send button. It uses your Zen space's own colours, so it follows each space and Zen's
-light/dark setting.
+blank empty chat, and one big rounded composer with your context cards, the box, and a bottom row with **+**, a **tabs**
+button, a **globe** to force web search, a **camera** and a round send button. It uses your Zen space's own colours, so it
+follows each space and Zen's light/dark setting.
+
+## What it is doing, always on screen
+
+Whenever the model is working, you can see what it is doing:
+
+- A thin light sweeps under the header and the send button wears a spinning ring while anything is running.
+- Above the answer, a live list shows each step as it happens: **Reading this page**, **Looking through 48 links on this
+  page**, **Opening 3 linked pages** (one favicon chip per page, turning ✓ or ✗ as each one loads), **Searching the web for
+  "…"**, **Drafting an answer**, **Thinking**. The running step has a spinner and a light sweep across its text; after a few
+  seconds it also shows how long it has been going, so a slow on-device model never looks frozen.
+- When the answer starts, the steps fold into a one-line summary ("Read the page · Read 3 linked pages · 4.2s") that you can
+  open again with a click.
+- The answer fades in a few words at a time instead of in blocks, and never shows half-finished `**bold**`, `code` or links.
+- A tab or link you just added shows a card with a spinner and a "Reading…" line until its text is in.
+
+With *Reduce motion* on, the sweeps and spinners stay still.
 
 ## Opening it
 
@@ -58,7 +74,7 @@ what that means depends on the model:
 | | Low | Medium | High | Max |
 |---|---|---|---|---|
 | **Answer style** | brief | balanced | thorough | thorough, checked against the sources |
-| **Apple Intelligence** | one quick pass | one pass | reads the **whole page in parts**, keeps notes for your question, then answers | also drafts an answer and **refines** it |
+| **Apple Intelligence** | one quick pass | one pass, takes notes on linked pages | reads the **whole page in parts**, keeps notes for your question, then answers | also drafts an answer and **refines** it |
 | **Gemini** | light thinking | light thinking | more thinking | longest thinking |
 | **Reasoning models** | `reasoning_effort` low | medium | high | high |
 
@@ -68,18 +84,66 @@ background calls (like deciding whether to search) always stay at low effort.
 
 Effort is a slider in the sidebar because Sine's settings page has no slider control.
 
+## Links on the page
+
+The sidebar understands the links on the page you are on, not just the page text. For each link it keeps the link text, the
+sentence or row around it, the heading it sits under, and whether it is a reference, an outbound link, an in-site link or just
+site navigation. Tracking parameters and redirect wrappers (Google, Facebook, Reddit) are stripped, share and login buttons
+are ignored, and listing pages (search results, forums, link roundups) work as well as articles.
+
+- **Say what you mean.** "What does the second source say?", "open the last reference", "read link 3", "summarize the
+  sources", "check the arxiv paper", or paste a URL. Explicit URLs and "the third link" are resolved directly; names and
+  keywords are matched locally.
+- **The small model only chooses between a short list.** Apple Intelligence is shown up to 12 locally ranked candidates with
+  a bit of context, never the whole page's links, and picks up to three. If it picks none, the best local matches are used.
+- **Only what matters is kept.** Each opened page is cut down to the passages that answer your question (not just its first
+  few hundred characters). On Apple Intelligence (Medium and up), each page is first distilled into short notes about your
+  question. PDFs are read too.
+- **A slow or broken link no longer breaks the answer.** It is marked ✗ in the activity list and the model is told it
+  couldn't be opened, so it says so instead of guessing.
+- **Pointing at links.** The model sees the page's links labelled L1, L2… (the most relevant to your question first) and
+  refers to them as `[L3]`, which the sidebar turns into a real clickable link. It never types URLs itself. The link list
+  stays available on follow-up questions for as long as the page is in the chat.
+- **Add links as context yourself.** In the tab picker (below), switch to **Links**, or type `@` plus a few words of a link's
+  text.
+
+## Context: tabs, links, files
+
+Add context from the **tabs button** (next to **+**), **+ → Add tabs & links…**, `@`, or by dragging.
+
+**The picker** is one panel that stays open while you tick things, so adding five tabs is five taps:
+
+- **Tabs**: every open web tab, including sleeping ones (those are fetched in the background). Sorted by recency and grouped
+  as *In this group / This space / Other spaces*. Tab groups appear as chips that add the whole group in one tap.
+- **Links**: the links on the page you are viewing, grouped as *In the page / References / Site menu*, each with its
+  surrounding sentence.
+- Search box (always focused), **↑ ↓** to move, **Enter** or **Space** to tick, **Add all**, **Clear**, **Esc** to close.
+- Cards appear instantly with a spinner. If you press send while one is still reading, the message goes out the moment it
+  is ready.
+
+You can also drop onto the sidebar (a "Drop to add as context" overlay appears):
+
+- **Tabs**: drag a tab from Zen's tab list. Drop several at once, or a whole **tab group / folder**. PDFs open in a tab are
+  read as PDFs.
+- **Files**: images (PNG, JPEG, GIF, WebP), **PDFs**, **Word / Excel / PowerPoint** (.docx .xlsx .pptx), and text or code files.
+  Paste images straight into the box too.
+- **Selected text**: select text on the page and it appears as a Selection card, or right-click → *Ask Chat about selection*.
+
+The current page starts as a context card above the chat box with an **Included / Skipped** control. It is greyed out when
+skipped from the first message. After that first message, it becomes a normal removable tab card for later messages. The
+**camera** attaches a screenshot as a *Capture* card (only models marked *Can read images* look at it). Up to 12 cards at a time.
+
 ## Web search
 
 **Automatic by default.** When a question needs current or outside information, the model searches the web by itself:
 
 - **Gemini** uses Google Search directly.
 - **Other models** (including Apple Intelligence) make one quick call to decide whether and what to search, then the mod
-  searches with DuckDuckGo by default, reads up to three pages and answers with clickable **[1] [2]** citations. Click the
-  globe to force a search for this chat; it also works with Apple Intelligence through AFM Server. In Settings, you can
-  choose Google Search, Brave Search or a SearXNG instance. Available providers are tried as fallbacks if the selected one
-  is unavailable or rate-limited. When you ask it to search links embedded in the current page, it can choose relevant links,
-  read up to three linked pages and answer with clickable citations. Questions that are plainly about the page ("summarize this
-  page") skip that extra call.
+  searches with DuckDuckGo by default, reads up to three pages (the passages that match your question) and answers with
+  clickable **[1] [2]** citations. Click the globe to force a search for this chat; it also works with Apple Intelligence
+  through AFM Server. In Settings, you can choose Google Search, Brave Search or a SearXNG instance. Available providers
+  are tried as fallbacks if the selected one is unavailable or rate-limited. Questions that are plainly about the page
+  ("summarize this page") skip that extra call.
 
 Google Search reads the browser's Google results page, spaces requests out, and can use the existing browser session when
 available. Google may still show a CAPTCHA or rate-limit the request; the mod then tries another configured provider. This is
@@ -89,33 +153,19 @@ customers and is scheduled to end for existing customers on January 1, 2027.
 Brave Search needs an API key and SearXNG needs an instance address. Google Search and DuckDuckGo need no extra setup.
 
 Change automatic search in **Settings → Chat → Web search** (Automatic / Only when I ask / Off), or in the setup guide. The
-globe or **@Web** forces a search even when automatic search is Off. Fetched page text is not saved to history.
+globe or **@Web** forces a search even when automatic search is Off. With search Off, link following still works when you ask
+for it, but the model never searches the web on its own. Fetched page text is not saved to history.
 
 Gemini API limits are set by Google per project and model. The sidebar retries temporary 429s and, when using the automatic
 Flash choice, tries another offered Flash model and then Flash-Lite. If the project quota is zero or exhausted, open
 **Check Gemini limits** in the error message; the sidebar cannot override Google's project limits.
 
-## Context: drag things in
-
-Drop onto the sidebar (a "Drop to add as context" overlay appears):
-
-- **Tabs**: drag a tab from Zen's tab list. Its readable text becomes a card. Drop several at once, or a whole **tab group /
-  folder**. PDFs open in a tab are read as PDFs.
-- **Files**: images (PNG, JPEG, GIF, WebP), **PDFs**, **Word / Excel / PowerPoint** (.docx .xlsx .pptx), and text or code files.
-  Paste images straight into the box too.
-- **Selected text**: select text on the page and it appears as a Selection card, or right-click → *Ask Chat about selection*.
-
-The current page starts as a context card above the chat box with an **Included / Skipped** control. It is greyed out when
-skipped from the first message. After that first message, it becomes a normal removable tab card for later messages. Use **+ →
-Add an open tab…** to search and choose from your loaded web tabs. The **camera** attaches a screenshot as a *Capture* card
-(only models marked *Can read images* look at it). Up to 12 cards at a time.
-
 ## Chat
 
 - **/ Skills**: saved prompts. Built in: Summarize, Key takeaways, Explain simply, Action items, Flashcards, Fact-check,
   Proofread, Translate. Make your own (＋ New skill; *Write it for me* drafts one from a sentence).
-- **@ mentions**: open tabs, tab groups, **@list / @table / @code / @email / @tldr / @steps** to shape the answer, **@Web** and
-  **@Tabs** (ask to close, group or open tabs; you review the proposal and press Apply).
+- **@ mentions**: open tabs, matching links on the page, tab groups, **@list / @table / @code / @email / @tldr / @steps** to
+  shape the answer, **@Web** and **@Tabs** (ask to close, group or open tabs; you review the proposal and press Apply).
 - **Stop & Resume**, **Regenerate**, **Copy**, **Edit** your messages or the model's answers. Type while an answer is streaming
   and your message is queued.
 - The **header menu** (top right) has **Chat history** (search, restore, delete; stored in `dia-sidebar-chats.json`, turn it off
@@ -143,7 +193,8 @@ automatic unless you change the new setting.
 
 Connected apps (Gmail, Calendar, Slack…), voice dictation, HEIC images, memory, and anything that needs Dia's own backend. Old
 `.doc` / `.xls` / `.ppt` files aren't read, only the modern formats. Local `file://` pages and Reader View are not treated as
-pages yet.
+pages yet. Pages that need you to be signed in can't be opened from a *link* (links are fetched without your cookies); open them
+in a tab instead and add the tab.
 
 ## Install (Sine)
 
@@ -156,14 +207,15 @@ Sine installs mods from a GitHub repo, and only runs a mod's JavaScript if you a
 4. Disable or uninstall the old Page Summary mod (both use ⌘E).
 
 **Updating an install that uses another script filename?** Sine stores each mod's script filename when it is installed
-(`chrome/sine-mods/mods.json`), so a script with a different name is never loaded. Reinstall from the repo, or save the new script
-over the old one under its original name and restart.
+(`chrome/sine-mods/mods.json`), so a script with a different name is never loaded. The script must be named
+`dia-sidebar.uc.js` (with a dot, not an underscore). Reinstall from the repo, or save the new script over the old one under
+its original name and restart.
 
 ## If nothing appears
 
 1. The sidebar only opens on a web page. On a new tab the URL bar icon is dimmed on purpose. Open a site first.
 2. Hover the URL bar: the chat icon appears on hover. No icon at all means the script isn't running: check the two Sine steps above.
-3. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see `[dia-sidebar] loaded v2.3.0`. A
+3. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see `[dia-sidebar] loaded v2.4.0`. A
    wrong script filename shows up as `[Sine]: Failed to load script`. If clicking the icon does nothing on a page, look for
    `[dia-sidebar] couldn't open the sidebar` and the error under it.
 

@@ -14,7 +14,7 @@
   const SEL_MSG = "dia-sidebar:selection";
   const MAX_CHARS = 24000;
   const MAX_REFS = 12;
-  const VERSION = "2.3.0";
+  const VERSION = "2.4.0";
   const DEFAULT_PROMPT = "Summarize this page into concise bullet points.";
   const SYSTEM =
     "You are an AI assistant living in a sidebar next to the web page the user is viewing. " +
@@ -90,6 +90,7 @@
     chev: "M4.5 6.5L8 10l3.5-3.5",
     page: "M4 2.5h5l3 3v8H4zM9 2.5v3h3",
     folder: "M2.5 4.5h4l1.2 1.5h5.8v6.5h-11z",
+    tabs: "M3.5 3h9A1.5 1.5 0 0 1 14 4.5v7a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5v-7A1.5 1.5 0 0 1 3.5 3zM2 6.5h12M4.6 4.8h.01M6.6 4.8h.01",
     play: "M5.5 3.8v8.4L12 8z",
     check: "M3.5 8.5l3 3 6-6.5",
     sidebar: "M3.5 3h9A1.5 1.5 0 0 1 14 4.5v7a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5v-7A1.5 1.5 0 0 1 3.5 3zM9.5 3v10M11.4 6.2v3.6",
@@ -220,22 +221,67 @@
   .dia-queued > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* status, errors, streaming */
-  .dia-status { animation: dia-in 0.4s var(--ease) both, dia-pulse 1.6s ease-in-out 0.5s infinite; color: var(--mute); }
   .dia-note { font-size: 12px; color: var(--mute); margin-top: 4px; }
   .dia-error { color: var(--danger); word-break: break-word; margin: 0; }
+  /* while an answer is being written: a soft breathing dot at the end of the text */
   .dia-streaming .dia-answer > p:last-child::after, .dia-streaming .dia-answer > ul:last-child > li:last-child::after, .dia-streaming .dia-answer > ol:last-child > li:last-child::after {
-    content: "▍"; margin-inline-start: 2px; opacity: 0.6; animation: dia-blink 1s steps(2) infinite; }
-  .dia-dots { display: inline-flex; gap: 5px; align-items: center; padding: 4px 0 1px; }
-  .dia-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--mute); animation: dia-bounce 1.25s ease-in-out infinite; }
-  .dia-dots i:nth-child(2) { animation-delay: 0.16s; } .dia-dots i:nth-child(3) { animation-delay: 0.32s; }
-  .dia-chunk-in { animation: dia-chunk 0.6s var(--ease) both; }
+    content: ""; display: inline-block; width: 7px; height: 7px; margin-inline-start: 5px; border-radius: 50%; background: var(--accent); vertical-align: 0.06em; animation: dia-breathe 1.2s ease-in-out infinite; }
+  .dia-chunk-in { animation: dia-chunk 0.42s var(--ease) both; }
   .dia-think { margin: 0 0 10px; font-size: 13px; color: var(--mute); }
   .dia-think summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 4px; user-select: none; width: fit-content; }
   .dia-think summary::-webkit-details-marker { display: none; }
   .dia-think summary .dia-svg { width: 12px; height: 12px; transition: transform 0.2s; transform: rotate(-90deg); }
   .dia-think[open] summary .dia-svg { transform: none; }
-  .dia-think.dia-live summary span { animation: dia-pulse 1.4s ease-in-out infinite; }
   .dia-think-body { margin-top: 6px; padding-inline-start: 12px; border-inline-start: 2px solid var(--line); white-space: pre-wrap; max-height: 180px; overflow-y: auto; scrollbar-width: thin; }
+
+  /* the agent's activity: every step it takes shows up here live (reading the page, picking links, searching, thinking),
+     then folds into a one-line summary you can open again */
+  .dia-progress { position: relative; flex: none; height: 2px; margin: 0 18px; border-radius: 2px; overflow: hidden; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .dia-progress::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 38%; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: dia-sweep 1.4s cubic-bezier(0.45, 0, 0.25, 1) infinite; }
+  .dia-working .dia-progress { opacity: 1; }
+  .dia-working .dia-composer { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+  .dia-send { position: relative; }
+  .dia-working .dia-send::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--accent); border-right-color: color-mix(in srgb, var(--accent) 35%, transparent); animation: dia-spin 0.9s linear infinite; pointer-events: none; }
+  .dia-flow { margin: 0 0 12px; font-size: 13px; line-height: 18px; color: var(--mute); }
+  .dia-flow[hidden] { display: none; }
+  .dia-flow-head { appearance: none; border: 0; background: transparent; display: flex; align-items: center; gap: 5px; max-width: 100%; padding: 2px 6px 2px 0; border-radius: 8px; cursor: pointer; color: inherit; font: inherit; line-height: 18px; }
+  .dia-flow-head:hover { color: var(--fg); }
+  .dia-flow-head .dia-svg { width: 12px; height: 12px; transform: rotate(-90deg); transition: transform 0.25s var(--ease); }
+  .dia-flow.dia-open .dia-flow-head .dia-svg { transform: none; }
+  .dia-flow.dia-open .dia-flow-head { margin-bottom: 8px; }
+  .dia-flow.dia-live .dia-flow-head { display: none; }
+  .dia-flow-sum { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .dia-flow-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.32s var(--ease); }
+  .dia-flow.dia-open .dia-flow-body, .dia-flow.dia-live .dia-flow-body { grid-template-rows: 1fr; }
+  .dia-flow-list { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
+  .dia-step { display: flex; align-items: flex-start; gap: 9px; animation: dia-step-in 0.34s var(--ease) both; }
+  .dia-step-ico { flex: none; width: 16px; height: 18px; display: grid; place-items: center; }
+  .dia-step-ico .dia-svg { width: 14px; height: 14px; stroke-width: 2.2; }
+  .dia-step.dia-done .dia-step-ico { color: var(--accent); }
+  .dia-step.dia-done .dia-step-ico .dia-svg path { stroke-dasharray: 22; stroke-dashoffset: 22; animation: dia-draw 0.4s var(--ease) 0.04s forwards; }
+  .dia-step.dia-fail .dia-step-ico { color: var(--danger); }
+  .dia-step.dia-stopped .dia-step-ico { color: var(--mute); }
+  .dia-spin { display: block; width: 12px; height: 12px; box-sizing: border-box; border-radius: 50%; border: 1.8px solid color-mix(in srgb, var(--accent) 24%, transparent); border-top-color: var(--accent); animation: dia-spin 0.8s linear infinite; }
+  .dia-step-main { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .dia-step-label { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .dia-step-text { min-width: 0; overflow-wrap: anywhere; }
+  .dia-step-time { flex: none; font-size: 12px; font-variant-numeric: tabular-nums; opacity: 0.7; }
+  .dia-step.dia-done .dia-step-text, .dia-step.dia-stopped .dia-step-text { color: var(--mute); }
+  .dia-step.dia-fail .dia-step-text { color: var(--danger); }
+  /* the live step's text carries a light sweep, so the panel never looks frozen */
+  .dia-step.dia-active .dia-step-text, .dia-think.dia-live summary span {
+    background: linear-gradient(100deg, var(--mute) 32%, var(--fg) 50%, var(--mute) 68%) 100% 0 / 260% 100% no-repeat;
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; animation: dia-shimmer 1.7s linear infinite; }
+  .dia-step-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .dia-step-chips:empty { display: none; }
+  .dia-chipsrc { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 2px 8px 2px 6px; border-radius: 9px; background: var(--soft); font-size: 12px; color: var(--fg); animation: dia-step-in 0.3s var(--ease) both; transition: opacity 0.2s; }
+  .dia-chipsrc img { width: 13px; height: 13px; border-radius: 3px; flex: none; }
+  .dia-chipsrc > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px; }
+  .dia-chipsrc > i { flex: none; width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--accent) 28%, transparent); border-top-color: var(--accent); animation: dia-spin 0.8s linear infinite; }
+  .dia-chipsrc.dia-ok > i { border: 0; background: var(--accent); animation: dia-pop 0.3s var(--ease); }
+  .dia-chipsrc.dia-bad { opacity: 0.55; }
+  .dia-chipsrc.dia-bad > span { text-decoration: line-through; }
+  .dia-chipsrc.dia-bad > i { border: 0; background: var(--danger); animation: none; }
 
   .dia-actions { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 8px; margin-inline-start: -8px; animation: dia-fade 0.4s ease both; }
   .dia-mini { appearance: none; background: transparent; border: 0; cursor: pointer; font-size: 12px; padding: 3px 8px; border-radius: 8px; color: var(--mute); display: inline-flex; align-items: center; gap: 5px; transition: background-color 0.15s, color 0.15s; }
@@ -300,8 +346,9 @@
   .dia-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .dia-row-left { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
   .dia-row-right { display: flex; align-items: center; gap: 6px; flex: none; }
-  .dia-add, .dia-cam { width: 34px; height: 34px; flex: none; border-radius: 50%; }
-  .dia-add .dia-svg, .dia-cam .dia-svg { width: 20px; height: 20px; }
+  .dia-add, .dia-cam, .dia-tabsbtn { width: 34px; height: 34px; flex: none; border-radius: 50%; }
+  .dia-add .dia-svg, .dia-cam .dia-svg, .dia-tabsbtn .dia-svg { width: 20px; height: 20px; }
+  .dia-tabsbtn .dia-svg { stroke-width: 1.7; }
   .dia-chip { appearance: none; border: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 5px 11px 5px 9px; border-radius: 999px; font-size: 13px; color: inherit; background: color-mix(in srgb, var(--accent) 20%, transparent); }
   .dia-chip[hidden] { display: none; }
   .dia-chip .dia-svg { width: 14px; height: 14px; color: var(--accent); }
@@ -360,6 +407,45 @@
   .dia-sheet-head span { flex: 1; }
   .dia-panel.dia-sheeted > :not(.dia-sheet):not(.dia-dropzone):not(.dia-hmenu) { visibility: hidden; } /* never let the chat show through a sheet */
   .dia-sheet-body { flex: 1 1 0%; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+  /* tab & link picker */
+  .dia-picker { display: flex; flex-direction: column; padding: 8px 8px 6px; max-height: min(440px, 64vh); overflow: hidden; }
+  .dia-pk-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex: none; }
+  .dia-pk-seg { display: flex; gap: 2px; padding: 2px; border-radius: 10px; background: var(--soft2); flex: none; }
+  .dia-pk-seg button { appearance: none; border: 0; background: transparent; cursor: pointer; padding: 4px 11px; border-radius: 8px; font-size: 12.5px; color: var(--mute); transition: background-color 0.15s, color 0.15s; }
+  .dia-pk-seg button.on { background: var(--pop); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18); }
+  .dia-picker .dia-search { margin: 0; padding: 5px 10px; flex: 1; min-width: 0; }
+  .dia-pk-chips { display: flex; gap: 6px; margin-bottom: 6px; overflow-x: auto; scrollbar-width: none; flex: none; }
+  .dia-pk-chips:empty { display: none; }
+  .dia-pk-chip { appearance: none; flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px 3px 8px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; font-size: 12px; transition: background-color 0.15s, color 0.15s; }
+  .dia-pk-chip .dia-svg { width: 13px; height: 13px; }
+  .dia-pk-chip:hover { background: var(--soft); }
+  .dia-pk-chip.on { background: color-mix(in srgb, var(--accent) 18%, transparent); border-color: transparent; color: var(--accent); }
+  .dia-pk-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+  .dia-pk-sec { font-size: 11px; color: var(--mute); padding: 8px 8px 3px; letter-spacing: 0.02em; }
+  .dia-pk-row { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; appearance: none; border: 0; background: transparent; text-align: start; padding: 6px 8px; border-radius: 10px; cursor: pointer; color: inherit; font: inherit; }
+  .dia-pk-row:hover, .dia-pk-row.dia-active { background: var(--soft); }
+  .dia-pk-row > .dia-svg { width: 16px; height: 16px; flex: none; color: var(--mute); }
+  .dia-pk-fav { width: 18px; height: 18px; border-radius: 4px; flex: none; object-fit: contain; }
+  .dia-pk-main { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+  .dia-pk-title { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dia-pk-sub { font-size: 11.5px; color: var(--mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dia-pk-check { flex: none; width: 18px; height: 18px; box-sizing: border-box; display: grid; place-items: center; border-radius: 50%; border: 1.6px solid color-mix(in srgb, var(--fg) 30%, transparent); color: transparent; transition: background-color 0.15s, border-color 0.15s, transform 0.15s var(--ease); }
+  .dia-pk-check .dia-svg { width: 11px; height: 11px; stroke-width: 2.8; }
+  .dia-pk-row:active .dia-pk-check { transform: scale(0.85); }
+  .dia-pk-row.dia-on .dia-pk-check { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); }
+  .dia-pk-row.dia-loading .dia-pk-check { background: transparent; border-color: color-mix(in srgb, var(--accent) 25%, transparent); border-top-color: var(--accent); color: transparent; animation: dia-spin 0.8s linear infinite; }
+  .dia-pk-empty { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 22px 10px; color: var(--mute); font-size: 12.5px; }
+  .dia-pk-foot { display: flex; align-items: center; gap: 4px; margin-top: 6px; padding: 7px 2px 0; border-top: 1px solid var(--line); flex: none; }
+  .dia-pk-count { flex: 1; font-size: 12px; color: var(--mute); padding-inline-start: 6px; }
+  .dia-pk-btn { appearance: none; border: 0; background: transparent; cursor: pointer; font-size: 12.5px; color: var(--mute); padding: 4px 9px; border-radius: 8px; }
+  .dia-pk-btn:hover { background: var(--soft); color: var(--fg); }
+  .dia-pk-btn[hidden] { display: none; }
+  .dia-pk-done, .dia-pk-done:hover { background: var(--accent); color: var(--on-accent, #fff); padding: 4px 14px; border-radius: 999px; }
+  /* a card whose text is still being read */
+  .dia-card-thumb { position: relative; }
+  .dia-card-loading .dia-card-fav { opacity: 0.3; }
+  .dia-card-spin { position: absolute; inset: 0; margin: auto; width: 18px; height: 18px; }
+  .dia-card-loading .dia-card-sub { background: linear-gradient(100deg, var(--mute) 32%, var(--fg) 50%, var(--mute) 68%) 100% 0 / 260% 100% no-repeat; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; animation: dia-shimmer 1.7s linear infinite; }
   .dia-search { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; margin: 2px 12px 8px; padding: 7px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); color: var(--mute); }
   .dia-search input { flex: 1; min-width: 0; border: 0 !important; outline: 0 !important; background: transparent !important; color: var(--fg); font: inherit; padding: 0 !important; }
   .dia-row-item { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 10px; border-radius: 12px; cursor: pointer; }
@@ -405,10 +491,14 @@
 @keyframes dia-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes dia-slide { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
 @keyframes dia-slide-l { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: none; } }
-@keyframes dia-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
-@keyframes dia-blink { 50% { opacity: 0; } }
-@keyframes dia-bounce { 0%, 75%, 100% { opacity: 0.3; transform: translateY(0); } 38% { opacity: 0.95; transform: translateY(-4px); } }
-@keyframes dia-chunk { from { opacity: 0; filter: blur(1px); } to { opacity: 1; filter: blur(0); } }
+@keyframes dia-chunk { from { opacity: 0; filter: blur(2px); } to { opacity: 1; filter: blur(0); } }
+@keyframes dia-breathe { 0%, 100% { opacity: 0.35; transform: scale(0.7); } 50% { opacity: 1; transform: scale(1); } }
+@keyframes dia-spin { to { transform: rotate(1turn); } }
+@keyframes dia-sweep { from { transform: translateX(-100%); } to { transform: translateX(270%); } }
+@keyframes dia-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@keyframes dia-step-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes dia-draw { to { stroke-dashoffset: 0; } }
+@keyframes dia-pop { from { transform: scale(0.3); } 60% { transform: scale(1.35); } to { transform: scale(1); } }
 @keyframes dia-fade { from { opacity: 0; } to { opacity: 1; } }
 /* the chat button inside the URL bar (in Zen, the URL bar sits at the top of the left sidebar).
    Icon: Ionicons "chatbubble-ellipses" (MIT), the glyph Zen ships for its own chat icon.
@@ -432,6 +522,8 @@
 @keyframes dia-nudge { 20%, 60% { transform: translateX(-2px); } 40%, 80% { transform: translateX(2px); } }
 @media (prefers-reduced-motion: reduce) {
   #dia-dock, #dia-dock * { animation-duration: 1ms !important; animation-delay: 0s !important; transition-duration: 1ms !important; }
+  #dia-dock .dia-spin, #dia-dock .dia-chipsrc > i, #dia-dock .dia-progress::before, #dia-dock .dia-send::after, #dia-dock .dia-streaming .dia-answer *::after { animation: none !important; }
+  #dia-dock .dia-step.dia-active .dia-step-text, #dia-dock .dia-think.dia-live summary span { animation: none !important; background: none !important; -webkit-text-fill-color: currentColor; color: var(--fg); }
 }
 `;
 
@@ -669,26 +761,83 @@
   }
 
   // ---------- page text ----------
+  // Collects the links on a page WITH their meaning: anchor text, the sentence/row around the link, the heading it sits
+  // under, and whether it is a reference, an outbound link, an in-site link or just navigation. Nothing is skipped just
+  // because it is outside <main>, so listing pages (search results, forums, link roundups) work too.
+  // IMPORTANT: this function is also stringified into a frame script, so it must not use anything outside itself.
   function extractPageLinks(doc) {
-    const root = doc.querySelector("article, main, [role=main], #mw-content-text, #content") || doc.body;
-    if (!root) return [];
-    const skip = "nav, footer, aside, header, form, .navbox, .reflist, .references, .toc, #toc, .mw-editsection";
-    const base = doc.location?.href || "";
-    const seen = new Set(), links = [];
-    for (const a of root.querySelectorAll("a[href]")) {
-      if (a.closest(skip)) continue;
-      let u;
-      try { u = new URL(a.getAttribute("href"), base); } catch { continue; }
-      if (!/^https?:$/.test(u.protocol)) continue;
-      u.hash = "";
-      if (u.href === base.replace(/#.*$/, "") || seen.has(u.href)) continue;
-      const title = (a.getAttribute("aria-label") || a.getAttribute("title") || a.innerText || a.textContent || "").replace(/\s+/g, " ").trim().slice(0, 120);
-      if (title.length < 2) continue;
-      seen.add(u.href);
-      links.push({ title, url: u.href });
-      if (links.length >= 30) break;
-    }
-    return links;
+    try {
+      const loc = doc.location;
+      const base = loc?.href || "";
+      const pageNoHash = base.replace(/#.*$/, "").replace(/\/$/, "");
+      const pageHost = (loc?.hostname || "").replace(/^www\./, "");
+      const main = doc.querySelector("article, main, [role=main], #mw-content-text, #content, .post, .entry-content");
+      const NAV = "nav, footer, aside, [role=navigation], [role=contentinfo], [role=complementary], .navbox, .toc, #toc, .mw-editsection, .navbar, .menu, .breadcrumb, .breadcrumbs, .pagination, .sidebar";
+      const REFS = ".references, .reflist, #references, .footnotes, .endnotes, .bibliography, .citation, cite, .sources, #sources, [id^=cite_note]";
+      const NOISE_TEXT = /^(skip to (main )?content|sign ?in|log ?in|sign ?up|register|subscribe|share|tweet|pin it|email|print|save|reply|permalink|report|flag|hide|menu|home|top|back to top|cookies?|accept( all)?|reject( all)?|manage|privacy( policy)?|terms( of (use|service))?|contact( us)?|about( us)?|advertis\w*|more|next|previous|prev|older|newer|[«»‹›…×x])$/i;
+      const NOISE_URL = /^https?:\/\/(?:[^/]+\.)?(?:facebook\.com\/(?:sharer|share|dialog)|(?:twitter|x)\.com\/(?:intent|share)|linkedin\.com\/(?:shareArticle|sharing)|pinterest\.com\/pin\/create|reddit\.com\/submit|api\.whatsapp\.com\/send|wa\.me|t\.me\/share)/i;
+      const TRACK = /^(utm_[a-z]+|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|igshid|ref_src|ref_url|cmpid|spm|yclid|_hsenc|_hsmi)$/i;
+      const found = new Map();
+      let order = 0, scanned = 0, section = "";
+      for (const el of doc.querySelectorAll("h1, h2, h3, a[href]")) {
+        if (++scanned > 5000) break;
+        if (el.localName !== "a") {
+          const t = (el.textContent || "").replace(/\s+/g, " ").trim();
+          if (t) section = t.slice(0, 60);
+          continue;
+        }
+        const raw = el.getAttribute("href") || "";
+        if (!raw || raw[0] === "#" || /^(javascript|mailto|tel|data|blob|about|file|sms):/i.test(raw)) continue;
+        let u;
+        try { u = new URL(raw, base); } catch { continue; }
+        if (!/^https?:$/.test(u.protocol)) continue;
+        // see through the redirect wrappers sites put around outbound links
+        const hn = u.hostname.replace(/^www\./, "");
+        let inner = "";
+        if (/^google\.[a-z.]+$/.test(hn) && u.pathname === "/url") inner = u.searchParams.get("q") || u.searchParams.get("url") || "";
+        else if (/^l?m?\.facebook\.com$/.test(hn) && u.pathname.startsWith("/l.php")) inner = u.searchParams.get("u") || "";
+        else if (hn === "duckduckgo.com" && u.pathname.startsWith("/l/")) inner = u.searchParams.get("uddg") || "";
+        else if (hn === "out.reddit.com") inner = u.searchParams.get("url") || "";
+        if (/^https?:\/\//i.test(inner)) { try { u = new URL(inner); } catch {} }
+        for (const k of [...u.searchParams.keys()]) if (TRACK.test(k)) u.searchParams.delete(k);
+        u.hash = "";
+        const href = u.href;
+        if (href.replace(/\/$/, "") === pageNoHash || NOISE_URL.test(href)) continue;
+
+        const text = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
+        let title = text || (el.getAttribute("aria-label") || el.getAttribute("title") || el.querySelector("img[alt]")?.getAttribute("alt") || "").replace(/\s+/g, " ").trim();
+        if (!title) {
+          try { title = decodeURIComponent(u.pathname.split("/").filter(Boolean).pop() || "").replace(/\.[a-z0-9]{2,5}$/i, "").replace(/[-_+]+/g, " ").trim(); } catch {}
+          if (title.length < 3) title = u.hostname.replace(/^www\./, "");
+        }
+        title = title.slice(0, 120);
+        if (title.length < 2 || NOISE_TEXT.test(title)) continue;
+
+        const prev = found.get(href);
+        if (prev) { prev.n++; if (prev.title.length < 8 && title.length > prev.title.length) prev.title = title; continue; }
+        const inRefs = !!el.closest(REFS);
+        const inMain = !!(main && main.contains(el));
+        const navish = !inRefs && !!(el.closest(NAV) || (!main && el.closest("header, [role=banner]")));
+        const external = u.hostname.replace(/^www\./, "") !== pageHost;
+        const kind = inRefs ? "ref" : navish ? "nav" : external ? "out" : "in";
+        const score = (kind === "ref" ? 2 : kind === "out" ? 1.5 : kind === "in" ? 1 : -1) + (inMain ? 1.5 : 0) + Math.min(title.length, 60) / 20;
+        found.set(href, { title, url: href, kind, section, n: 1, order: order++, score, el, text });
+      }
+      // keep the 120 most useful links, then restore page order so "the third link" means what it looks like
+      const picked = [...found.values()].sort((a, b) => b.score - a.score).slice(0, 120).sort((a, b) => a.order - b.order);
+      return picked.map((l) => {
+        let ctx = "";
+        try {
+          const block = l.el.closest("li, tr, article, p, dd, blockquote, figcaption, td, div") || l.el.parentElement;
+          const bt = (block?.textContent || "").replace(/\s+/g, " ").trim();
+          const at = l.text || l.title;
+          const i = at ? bt.indexOf(at) : -1;
+          ctx = i >= 0 ? (bt.length <= 260 ? bt : bt.slice(Math.max(0, i - 110), Math.min(bt.length, i + at.length + 110))) : bt.length <= 260 ? bt : "";
+          if (ctx === l.title) ctx = "";
+        } catch {}
+        return { title: l.title, url: l.url, kind: l.kind, section: l.section, ctx, n: l.n };
+      });
+    } catch (e) { return []; }
   }
   function extractInContent(extractLinks) {
     const doc = content.document;
@@ -1713,34 +1862,232 @@
         if (results.length) return results;
         errors.push(`${label(eng)} returned no results (possibly rate-limited or challenged)`);
       } catch (e) {
-        if (e.name === "AbortError") throw e;
+        if (signal?.aborted) throw e; // only the user stopping ends the answer; a timeout just tries the next provider
         errors.push(`${label(eng)}: ${String(e.message || e).slice(0, 140)}`);
       }
     }
     throw new Error("Web search failed. " + errors.join("; ") + ". Check the search settings or try again.");
   }
-  async function readSources(results, signal, cap) {
-    await Promise.all(results.slice(0, 3).map(async (r) => {
+  // Opens the top results and keeps the passages that matter for the query (not just the first few hundred characters)
+  async function readSources(results, signal, cap, query, chips) {
+    await Promise.all(results.slice(0, 3).map(async (r, i) => {
       try {
-        const res = await fetchText(r.url, {}, 7000, signal);
-        if (res.ok && /html|text/.test(res.ctype)) r.text = htmlToText(res.text).slice(0, cap);
-      } catch {}
+        const pg = await fetchReadable(r.url, signal, { ms: 7000 });
+        if (pg.ok && pg.text) { r.text = focusText(pg.text, query || r.title, cap); chips?.[i]?.done(); } else chips?.[i]?.fail();
+      } catch (e) { if (signal?.aborted) throw e; chips?.[i]?.fail(); }
     }));
   }
-  async function readPageLinks(links, signal, cap) {
-    return Promise.all(links.slice(0, 3).map(async (link) => {
-      const result = { title: link.title, url: link.url, snippet: "" };
-      try {
-        const res = await fetchText(link.url, {}, 7000, signal);
-        if (res.ok && /html|text/.test(res.ctype)) result.text = htmlToText(res.text).slice(0, cap);
-      } catch (e) { if (e.name === "AbortError") throw e; }
-      return result;
-    }));
+  // ---------- links: understanding them, picking the right ones, reading them ----------
+  // The page's links arrive from extractPageLinks with their context. Here we (1) work out whether the user wants links
+  // followed, (2) pick the right ones locally (explicit URLs, "the third source", names, keywords) so even the tiny
+  // on-device model only has to choose between a short list, (3) open them and keep only the passages that matter for the
+  // question, and (4) turn the model's [L3] labels back into real clickable links.
+  const LSTOP = new Set(("the and for with that this from what which who whom how why about page pages link links tell read open check look find any all are was were has have had can could does did " +
+    "you your into onto over than then them they their there these those its me my our out get got want need please show give summarize summarise explain article articles first second third fourth fifth last next one two three").split(" "));
+  const ltokens = (s) => (String(s || "").toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []).filter((w) => !LSTOP.has(w));
+  const ORD_WORDS = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10, last: -1 };
+  const LNOUN = "(links?|hyperlinks?|references?|citations?|footnotes?|sources?)";
+  const LINK_NEAR = /\b(?:open|read|follow|check|visit|click|go (?:to|through)|look (?:at|into|through|up)|dig (?:into|through)|browse|fetch|pull up|scan|crawl|explore|summari[sz]e|compare|verify)\b[^.?!]{0,80}\b(?:links?|hyperlinks?|urls?|references?|citations?|footnotes?|sources?)\b|\b(?:links?|hyperlinks?|references?|citations?|sources?)\b[^.?!]{0,60}\b(?:on|in|from|within|inside|embedded)\b[^.?!]{0,40}\b(?:page|site|website|article|post|thread)\b/i;
+  const LINKED_THING = /\blinked\s+(?:article|page|post|story|study|paper|report|docs?|documentation|site|source|video|thread|resource|content)s?\b|\b(?:article|page|post|study|paper|report|source)s?\s+(?:it|they|this|that|the \w+)\s+(?:links?|cites?|references?)\b/i;
+  const LEARN_MORE = /\b(?:learn more|read more|original (?:source|study|paper|report|announcement)|primary source|where (?:did|does) (?:this|that|it|the \w+) come from)\b/i;
+  function linkIntent(text) {
+    const t = String(text || "");
+    const urls = [...new Set((t.match(/https?:\/\/[^\s<>()"'`]+/g) || []).map((u) => u.replace(/[.,;:!?\]]+$/, "")))].slice(0, 3);
+    const ord = [];
+    const add = (word, noun) => {
+      const n = ORD_WORDS[word.toLowerCase()] ?? parseInt(word, 10);
+      if (n && !ord.some((o) => o.n === n)) ord.push({ n, refs: /^(?:refer|citation|footnote|source)/i.test(noun) });
+    };
+    for (const m of t.matchAll(new RegExp(`\\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|\\d{1,3}(?:st|nd|rd|th))\\s+(?:\\w+\\s+)?${LNOUN}\\b`, "gi"))) add(m[1], m[2]);
+    for (const m of t.matchAll(new RegExp(`\\b${LNOUN}\\s*(?:#|no\\.?\\s*|number\\s*)?\\[?(\\d{1,3})\\]?(?!\\d)`, "gi"))) add(m[2], m[1]);
+    const wants = !!(urls.length || ord.length || LINK_NEAR.test(t) || LINKED_THING.test(t) || LEARN_MORE.test(t) || WANTS_PAGE_LINKS.test(t));
+    return { wants, urls, ord };
   }
-  const webBlock = (q, results, cap) =>
-    `=== WEB SEARCH RESULTS for "${q}" ===\n` +
-    results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${(r.text || r.snippet || "").slice(0, cap)}`).join("\n\n") +
-    "\n\nUse these results for facts beyond the page. Cite sources inline as [1], [2] right after the claims they support. Never cite a source that isn't listed.";
+
+  // relevance of every link to a request, from its text, the words around it, its heading and its address
+  function rankLinks(links, query) {
+    const q = new Set(ltokens(query));
+    const wantsRefs = /\b(?:sources?|references?|cite[sd]?|citations?|footnotes?|stud(?:y|ies)|papers?|research|original|evidence|proof)\b/i.test(query || "");
+    const ranked = (links || []).map((l, i) => {
+      let s = 0;
+      if (q.size) {
+        const tt = ltokens(l.title), ct = ltokens(l.ctx), st = ltokens(l.section);
+        let path = "";
+        try { path = decodeURIComponent(new URL(l.url).pathname); } catch {}
+        const ut = ltokens(path.replace(/[-_/.]+/g, " ")), host = hostOf(l.url).toLowerCase();
+        for (const w of q) {
+          if (tt.includes(w)) s += 3;
+          if (ct.includes(w)) s += 1.2;
+          if (st.includes(w)) s += 1;
+          if (ut.includes(w)) s += 1.5;
+          if (host.includes(w)) s += 2.5; // "the nature link", "check the arxiv paper"
+        }
+        if (s && tt.length && tt.every((w) => q.has(w))) s += 2; // the whole title is in the request
+      }
+      if (l.kind === "nav") s -= 1.5;
+      else if (l.kind === "ref" || l.kind === "out") s += wantsRefs ? 1.5 : 0.3;
+      return { ...l, i, s };
+    });
+    return ranked.sort((a, b) => b.s - a.s || a.i - b.i);
+  }
+
+  // which links should be opened for this request? explicit URLs and "the third link" are certain; names and keywords are
+  // ranked locally; anything still unclear comes back as a short candidate list for the model to choose from
+  function pickLinks(links, query, intent, max = 3) {
+    const picks = [];
+    const add = (l, why) => { if (l && /^https?:/.test(l.url) && !picks.some((p) => p.url === l.url)) picks.push({ ...l, why }); };
+    for (const u of intent.urls) add({ title: hostOf(u) || u, url: u, kind: "out", ctx: "" }, "url");
+    const content = links.filter((l) => l.kind !== "nav");
+    const refs = links.filter((l) => l.kind === "ref");
+    for (const o of intent.ord) {
+      const pool = o.refs && refs.length ? refs : content.length ? content : links;
+      add(o.n === -1 ? pool[pool.length - 1] : pool[o.n - 1], "ordinal");
+    }
+    if (picks.length) return { picks: picks.slice(0, max), candidates: [], confident: true };
+    const ranked = rankLinks(links, query);
+    let cands = ranked.filter((l) => l.s >= 2.5).slice(0, 12);
+    if (!cands.length && intent.wants) { // "read the sources": no names to match, so go by structure and spread across sites
+      const seen = new Set();
+      cands = [...ranked.filter((l) => l.kind === "ref"), ...ranked.filter((l) => l.kind === "out"), ...ranked.filter((l) => l.kind === "in")]
+        .filter((l) => { const hn = hostOf(l.url); if (seen.has(hn)) return false; seen.add(hn); return true; }).slice(0, 10);
+      return { picks: cands.slice(0, max), candidates: cands, confident: cands.length <= max };
+    }
+    const [a, b] = cands;
+    if (a && a.s >= 5 && (!b || a.s >= b.s * 1.5)) return { picks: [a], candidates: cands, confident: true };
+    if (cands.length && cands.length <= max) return { picks: cands, candidates: cands, confident: true };
+    return { picks: cands.slice(0, max), candidates: cands, confident: false };
+  }
+
+  // the numbered link list that goes into a prompt: the links most relevant to the request first (kept in page order),
+  // trimmed to a character budget. The model refers to a link by its label, e.g. [L3].
+  function linksPrompt(links, query, budget, n, compact) {
+    if (!links?.length || budget < 120) return "";
+    const chosen = rankLinks(links, query).slice(0, n).sort((a, b) => a.i - b.i);
+    const lines = [];
+    let used = 0;
+    for (const l of chosen) {
+      let path = "";
+      try { const u = new URL(l.url); path = (u.pathname + u.search).replace(/\/$/, ""); } catch {}
+      const line = compact
+        ? `L${l.i + 1} ${l.title.slice(0, 70)} (${hostOf(l.url)})`
+        : `L${l.i + 1}${l.kind === "ref" ? " [reference]" : l.kind === "nav" ? " [site menu]" : ""} ${l.title} — ${hostOf(l.url)}${path.slice(0, 60)}` +
+          (l.ctx && l.ctx !== l.title ? `\n    around it: “${l.ctx.slice(0, 150)}”` : "");
+      if (used + line.length + 1 > budget) break;
+      lines.push(line);
+      used += line.length + 1;
+    }
+    if (!lines.length) return "";
+    return `\n\n=== LINKS ON THIS PAGE (to point the user to one, write its label in square brackets like [L3]; never type a URL yourself) ===\n${lines.join("\n")}`;
+  }
+  // [L3] in an answer becomes a real link to the page's third link
+  const expandLinkRefs = (text, links) => !links?.length || !text.includes("[L") ? text
+    : text.replace(/\[L(\d{1,3})\]/g, (m, n) => {
+      const l = links[+n - 1];
+      return l ? `[${l.title.replace(/[\[\]()]/g, "").slice(0, 70)}](${l.url.replace(/\)/g, "%29")})` : m;
+    });
+
+  // a linked page, reduced to what a reader needs: title, description and body lines (PDFs are read too)
+  function readableFromHtml(html) {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const meta = (sel) => (doc.querySelector(sel)?.getAttribute("content") || "").trim();
+    const title = meta('meta[property="og:title"]') || (doc.title || "").trim();
+    const desc = meta('meta[name="description"]') || meta('meta[property="og:description"]');
+    doc.querySelectorAll("script,style,noscript,nav,header,footer,aside,form,svg,iframe,template,[aria-hidden=true],.sidebar,#comments,.comments,.cookie-banner").forEach((n) => n.remove());
+    const root = doc.querySelector("article, main, [role=main], #mw-content-text, #content, .post-content, .entry-content") || doc.body;
+    const lines = [], seen = new Set();
+    for (const el of root?.querySelectorAll("h1,h2,h3,p,li,blockquote,dd,pre") || []) {
+      const t = (el.textContent || "").replace(/\s+/g, " ").replace(/\[\d+\]/g, "").trim();
+      if (t.length < (/^H/.test(el.tagName) ? 2 : 25) || seen.has(t)) continue;
+      seen.add(t);
+      lines.push(t);
+    }
+    let text = lines.join("\n");
+    if (text.length < 300) text = (root?.textContent || "").replace(/\s+/g, " ").trim();
+    return { title, desc, text };
+  }
+  async function fetchReadable(url, signal, { ms = 8500, credentials = "omit" } = {}) {
+    const c = new AbortController();
+    const timer = setTimeout(() => c.abort(), ms);
+    const onAbort = () => c.abort();
+    signal?.addEventListener("abort", onAbort);
+    try {
+      const res = await fetch(url, { credentials, redirect: "follow", signal: c.signal, headers: { Accept: "text/html,application/xhtml+xml,application/pdf;q=0.9,text/plain;q=0.8,*/*;q=0.5" } });
+      if (!res.ok) return { ok: false, status: res.status };
+      const ctype = res.headers?.get?.("content-type") || "";
+      if (/pdf/i.test(ctype) || /\.pdf(?:$|[?#])/i.test(url)) {
+        const text = await pdfText(await res.arrayBuffer());
+        return text ? { ok: true, title: "", desc: "", text } : { ok: false, status: 0 };
+      }
+      if (ctype && !/html|xml|text\/plain|json/i.test(ctype)) return { ok: false, status: 0 };
+      const body = await res.text();
+      if (/json|text\/plain/i.test(ctype)) return { ok: true, title: "", desc: "", text: body.slice(0, 60000) };
+      return { ok: true, ...readableFromHtml(body) };
+    } finally { clearTimeout(timer); signal?.removeEventListener("abort", onAbort); }
+  }
+  // the passages of a long text that matter for a request (plus its opening), in their original order
+  function focusText(text, query, cap) {
+    if (text.length <= cap) return text;
+    const q = new Set(ltokens(query));
+    if (!q.size) return condense(text, cap);
+    const units = text.split("\n").map((u) => u.trim()).filter(Boolean);
+    const scored = units.map((u, i) => {
+      const ws = ltokens(u);
+      let s = 0;
+      for (const w of ws) if (q.has(w)) s += 1;
+      return { u, i, s: i === 0 ? s / Math.sqrt(ws.length || 1) + 1 : s / Math.sqrt(ws.length || 1) };
+    });
+    if (!scored.some((x) => x.s > 0.9 && x.i !== 0)) return condense(text, cap);
+    const out = [];
+    let used = 0;
+    for (const x of [...scored].sort((a, b) => b.s - a.s)) {
+      if (x.s <= 0 && out.length) break;
+      const piece = x.u.length > 600 ? x.u.slice(0, 600) + "…" : x.u;
+      if (used + piece.length + 1 > cap) continue;
+      out.push({ i: x.i, u: piece });
+      used += piece.length + 1;
+    }
+    return out.sort((a, b) => a.i - b.i).map((x) => x.u).join("\n");
+  }
+  // Opens the chosen links in parallel and keeps what matters for the request. A page that is slow or refuses is marked
+  // as failed instead of ending the whole answer. On the small on-device model each page is first distilled into notes
+  // (its window cannot hold a page), rather than being cut off after a few hundred characters.
+  async function readLinkPages(picks, signal, o) {
+    const results = picks.map((l) => ({ title: l.title, url: l.url, snippet: l.ctx || "" }));
+    await Promise.all(results.map(async (r, i) => {
+      const chip = o.chips?.[i];
+      try {
+        const pg = await fetchReadable(r.url, signal);
+        if (!pg.ok || !pg.text) throw new Error("unreadable");
+        if (pg.title && (!r.title || r.title === hostOf(r.url) || r.title.length < 12)) r.title = pg.title.slice(0, 120);
+        r.full = pg.text; r.desc = pg.desc;
+        chip?.done();
+      } catch (e) {
+        if (signal?.aborted) throw e; // only the user stopping ends the answer, never one slow page
+        r.failed = true;
+        chip?.fail();
+      }
+    }));
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      if (!r.full) continue;
+      if (o.notes && r.full.length > o.cap) {
+        o.step?.set(`Taking notes on ${hostOf(r.url)}`);
+        try {
+          const out = (await askOnce(NOTES_SYSTEM, `Request: ${String(o.query).slice(0, 300)}\n\nExcerpt from “${r.title}” (${hostOf(r.url)}):\n${focusText(r.full, o.query, 3800)}`, signal, true)).trim();
+          if (out && !/^NONE\b/i.test(out)) r.text = out.replace(/\s+/g, " ").slice(0, Math.max(o.cap, 560));
+        } catch (e) { if (signal?.aborted) throw e; }
+      }
+      if (!r.text) r.text = ((r.desc ? r.desc + "\n" : "") + focusText(r.full, o.query, o.cap)).slice(0, o.cap + (r.desc || "").length);
+      delete r.full;
+    }
+    return results;
+  }
+  const webBlock = (q, results, cap, linked) =>
+    (linked ? `=== PAGES OPENED FROM LINKS (${q}) ===\n` : `=== WEB SEARCH RESULTS for "${q}" ===\n`) +
+    results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n` + (r.failed
+      ? `(This page could not be opened. All that is known is the text around the link on the source page: ${(r.snippet || "none").slice(0, 200)})`
+      : (r.text || r.snippet || "").slice(0, cap))).join("\n\n") +
+    "\n\nUse these results for facts beyond the page. Cite sources inline as [1], [2] right after the claims they support. Never cite a source that isn't listed. If a page could not be opened, say so instead of guessing what it contains.";
   // ----- higher effort on the small on-device model -----
   // Its 4,096-token window can't hold a long page, so High reads the whole page in parts and keeps notes that matter
   // for the question; Max also drafts an answer and then refines it.
@@ -1784,17 +2131,21 @@
       return { ...req, messages: [{ role: "user", content: `${cut(src, 4800)}\n\n=== DRAFT ANSWER ===\n${cut(draft, 2400)}\n\n${cut(ask, 1200)}\n\nImprove the draft answer above: fix anything the sources contradict, add important points it missed, and tighten the wording. Reply with only the improved answer.` }] };
     } catch (e) { if (e.name === "AbortError") throw e; return req; }
   }
-  // asks the model whether to search; returns the query, or "" for no search
-  async function planSearch(convo, page, forced, signal) {
+  // Asks the model whether to search the web or open some of the page's links; returns { query } or { links }.
+  // Only a short, locally ranked candidate list is shown (never all of the page's links), which is what lets a 4,096-token
+  // model choose well.
+  async function planSearch(convo, page, forced, signal, candidates = []) {
     const last = [...convo].reverse().find((m) => m.role === "user");
     const msg = (last?.label || last?.content || "").slice(0, 400);
     const recent = convo.slice(-5, -1).map((m) => `${m.role}: ${(m.label || m.content || "").slice(0, 200)}`).join("\n");
-    const options = (page?.links || []).slice(0, 20);
-    const linkList = options.length ? `Links embedded in the current page:\n${options.map((x, i) => `${i + 1}. ${x.title} — ${x.url}`).join("\n")}\n` : "";
+    const options = candidates.slice(0, 12);
+    const linkList = options.length
+      ? `Links embedded in the current page (choose by number):\n${options.map((x, i) => `${i + 1}. ${x.title.slice(0, 80)} (${hostOf(x.url)})${x.ctx && x.ctx !== x.title ? " — " + x.ctx.slice(0, 90) : ""}`).join("\n")}\n`
+      : "";
     const ctx = `Today is ${new Date().toDateString()}.\n` + (page?.title ? `Page: ${page.title}\n` : "") + linkList + (recent ? `Recent chat:\n${recent}\n` : "") + `User message: ${msg}`;
     let out = "";
-    try { out = await askOnce(forced ? ROUTER_FORCED : ROUTER_SYSTEM, ctx, signal, true); } catch (e) { if (e.name === "AbortError") throw e; }
-    const lm = out.match(/LINKS:\s*([\d,\s]+)/i);
+    try { out = await askOnce(forced ? ROUTER_FORCED : ROUTER_SYSTEM, ctx, signal, true); } catch (e) { if (signal?.aborted) throw e; }
+    const lm = options.length ? out.match(/LINKS:\s*([\d,\s]+)/i) : null;
     const links = lm ? [...new Set((lm[1].match(/\d+/g) || []).map(Number))].filter((n) => n > 0 && n <= options.length).slice(0, 3).map((n) => options[n - 1]) : [];
     if (links.length) return { query: "", links };
     const m = out.match(/SEARCH:\s*(.+)/i);
@@ -1950,6 +2301,99 @@
     return { text: text.replace(m[0], "").trim(), actions: Array.isArray(actions) ? actions : null };
   }
 
+  // ---------- activity flow: what the agent is doing, live, above its answer ----------
+  // Every stage (reading the page, picking links, opening them, searching, drafting, thinking) is a step with a spinner and
+  // a light text sweep while it runs, a check when it is done, and a favicon chip per page it touches. When the answer starts
+  // the steps fold into a one-line summary ("Read the page · Read 3 linked pages · 4.2s") that opens again on click.
+  function makeFlow(block, before) {
+    const t0 = Date.now();
+    const root = h("div", { className: "dia-flow dia-live", hidden: true });
+    const sum = h("span", { className: "dia-flow-sum" });
+    const head = h("button", { className: "dia-flow-head", type: "button" }, sum, icon("chev"));
+    const list = h("div", { className: "dia-flow-list" });
+    root.append(head, h("div", { className: "dia-flow-body" }, list));
+    if (before && before.parentNode === block) block.insertBefore(root, before); else block.prepend(root);
+    head.setAttribute("aria-expanded", "false");
+    head.addEventListener("click", () => head.setAttribute("aria-expanded", String(root.classList.toggle("dia-open"))));
+    const steps = [];
+    let active = null, timer = null, ended = false, mode = "done", total = 0;
+    const fmt = (ms) => (ms < 9950 ? (ms / 1000).toFixed(1) : Math.round(ms / 1000)) + "s";
+    // after a few seconds the live step shows how long it has been going, so a slow model never looks hung
+    const tick = () => { if (active?.state === "active") { const ms = Date.now() - active.start; active.time.textContent = ms >= 3000 ? fmt(ms) : ""; } };
+    function mk(label, o) {
+      const ico = h("span", { className: "dia-step-ico" }, h("i", { className: "dia-spin" }));
+      const text = h("span", { className: "dia-step-text", textContent: label });
+      const time = h("span", { className: "dia-step-time" });
+      const chips = h("div", { className: "dia-step-chips" });
+      const el = h("div", { className: "dia-step dia-active" }, ico, h("div", { className: "dia-step-main" }, h("div", { className: "dia-step-label" }, text, time), chips));
+      const s = {
+        el, time, label, kind: o.kind || "", quiet: !!o.quiet, doneText: o.done || "", doneLabel: "", state: "active", start: Date.now(),
+        set(t) { s.label = t; text.textContent = t; return s; },
+        chip(d) {
+          const c = h("span", { className: "dia-chipsrc", title: d.url || d.label },
+            h("img", { src: d.icon || "page-icon:" + d.url, onerror: (e) => e.target.remove() }), h("span", { textContent: d.label }), h("i"));
+          chips.append(c);
+          return { done() { c.classList.add("dia-ok"); }, fail() { c.classList.add("dia-bad"); } };
+        },
+        finish(state, glyph, t) {
+          if (s.state !== "active") return s;
+          s.state = state;
+          el.classList.remove("dia-active");
+          el.classList.add("dia-" + state);
+          ico.replaceChildren(icon(glyph));
+          if (t || s.doneText) s.set(t || s.doneText);
+          s.doneLabel = s.label;
+          time.textContent = "";
+          return s;
+        },
+        done(t) { return s.finish("done", "check", t); },
+        fail(t) { return s.finish("fail", "close", t); },
+        halt() { return s.finish("stopped", "close"); },
+        drop() { if (s.state === "dropped") return s; s.state = "dropped"; el.remove(); return s; },
+      };
+      return s;
+    }
+    const refresh = () => {
+      const shown = steps.filter((s) => !s.quiet && s.state !== "dropped");
+      if (!ended) { root.hidden = !steps.some((s) => s.state !== "dropped"); return; }
+      if (!shown.length) { root.hidden = true; return; }
+      root.hidden = false;
+      const main = shown.filter((s) => s.kind !== "links" && s.kind !== "plan"); // bookkeeping steps stay in the list, not the summary
+      const parts = (main.length ? main : shown).map((s) => s.doneLabel || s.label);
+      const lead = parts.length > 2 ? `${parts[0]} · ${parts[1]} · +${parts.length - 2}` : parts.join(" · ");
+      sum.textContent = (mode === "stopped" ? "Stopped · " : "") + lead + (total >= 1500 ? " · " + fmt(total) : "");
+    };
+    const api = {
+      root,
+      get active() { return active; },
+      get steps() { return steps; },
+      begin(label, o = {}) {
+        ended = false;
+        root.classList.add("dia-live");
+        if (active) { if (active.quiet) active.drop(); else active.done(); }
+        const s = mk(label, o);
+        steps.push(s); active = s; list.append(s.el);
+        clearInterval(timer); timer = setInterval(tick, 1000);
+        refresh();
+        return s;
+      },
+      // "Thinking": the step shown whenever nothing else is running, so there is always something alive on screen
+      wait(label = "Thinking") { if (!active || active.state !== "active") api.begin(label, { quiet: true }); },
+      dropQuiet() { if (active?.quiet) { active.drop(); active = null; } },
+      note(label, o = {}) { const s = mk(label, o); s.done(); steps.push(s); list.append(s.el); refresh(); return s; },
+      end(how = "done") {
+        if (ended) return;
+        ended = true; mode = how;
+        clearInterval(timer); timer = null;
+        if (active) { if (active.quiet) active.drop(); else if (how === "done") active.done(); else if (how === "failed") active.fail(); else active.halt(); active = null; }
+        total = Date.now() - t0;
+        root.classList.remove("dia-live");
+        refresh();
+      },
+    };
+    return api;
+  }
+
   // ---------- the docked sidebar (one per window) ----------
   // A real sidebar: the dock is a flex item placed right next to Zen's #tabbrowser-tabbox inside
   // #zen-tabbox-wrapper (plain Firefox has the same tabbox/parent shape), so the page genuinely gets narrower.
@@ -2027,7 +2471,7 @@
   // ---------- attachment pills ----------
   const refMeta = (r) => {
     switch (r.kind) {
-      case "tab": return { label: r.label || hostOf(r.url) || "Tab", sub: hostOf(r.url) || "Tab", image: r.image, ico: "page", tip: r.url, locked: r.locked };
+      case "tab": return { label: r.label || hostOf(r.url) || "Tab", sub: r.loading ? "Reading…" : hostOf(r.url) || "Tab", image: r.image, ico: "page", tip: r.url, locked: r.locked, loading: r.loading };
       case "clip": return { label: "Pasted text", sub: "Clipboard", ico: "copy", tip: (r.text || "").slice(0, 300) };
       case "file": return { label: r.label, sub: "File", ico: "clip", tip: r.label };
       case "pdf": return { label: r.label, sub: "PDF", ico: "page", tip: r.label };
@@ -2050,11 +2494,12 @@
 
   // a context card, like Dia's: picture (or icon) + title + a small subtitle (Capture, File, the site…)
   function card(d, onRemove) {
-    const el = h("div", { className: "dia-card" + (d.locked ? " dia-locked" : "") + (!onRemove ? " dia-card-static" : ""), title: d.tip || d.label || "" });
+    const el = h("div", { className: "dia-card" + (d.locked ? " dia-locked" : "") + (!onRemove ? " dia-card-static" : "") + (d.loading ? " dia-card-loading" : ""), title: d.tip || d.label || "" });
     const thumb = h("div", { className: "dia-card-thumb" });
     if (d.thumb) thumb.append(h("img", { src: d.thumb }));
     else if (d.image) thumb.append(h("img", { className: "dia-card-fav", src: d.image, onerror: (e) => e.target.replaceWith(icon(d.ico || "page")) }));
     else thumb.append(icon(d.ico || "page"));
+    if (d.loading) thumb.append(h("i", { className: "dia-spin dia-card-spin" }));
     el.append(thumb, h("div", { className: "dia-card-text" },
       h("div", { className: "dia-card-title", textContent: d.label }),
       h("div", { className: "dia-card-sub", textContent: d.sub || "" })));
@@ -2142,6 +2587,8 @@
     let page = null, convo = [], refs = [], ctrl = null, gen = 0, refSeq = 0, chatId = null, chatTitle = "", pageRefPromoted = false;
     let usePage = true, skill = null, formats = [], manage = false, webOn = false; // webOn: the globe button
     let queue = [], drainAfter = false, tabSnap = [], lastKey = "";
+    const reading = new Set(); // tab / link reads still in flight
+    let picker = null, linkCache = { key: "", links: [], pending: false }; // the tab & link picker, and the page's links read ahead of time
     let members = [src]; // all tabs this chat spans — >1 when opened over a split view
     let self = null, noteEl = null, noteTimer = null, pop = null;
     const isMember = (t) => t === src || members.includes(t);
@@ -2170,7 +2617,7 @@
       sendBtn.title = stopMode ? "Stop generating" : busy ? "Queue this message" : "Send";
       sendBtn.disabled = !busy && !hasContent();
     }
-    const setBusy = (b) => { busy = b; updateSend(); };
+    const setBusy = (b) => { busy = b; panel?.classList.toggle("dia-working", b); updateSend(); };
     const updateTitle = () => { if (titleEl) titleEl.textContent = chatTitle || (isVid() ? "Video chat" : "Chat"); };
     // Focus the textarea reliably: when the sidebar opens from a shortcut, keyboard focus is still in
     // the web content (a separate focus scope), so also blur the content browser and raise the window.
@@ -2241,6 +2688,7 @@
       if (input) input.placeholder = isVid() && hasPageContext ? "Ask a question about this video..." : hasPageContext && pd ? "Ask a question about this page..." : "Ask anything...";
       updateSend();
       updateWebBtn();
+      syncPicker();
     }
 
     function addRef(text) {
@@ -2304,49 +2752,19 @@
       addContext({ kind: "image", capture: true, label: src.label || hostOf(srcUrl()) || "Page", url: srcUrl() || "", mime: "image/jpeg", b64: cap.b64, dataUrl: cap.thumb, text: "[capture of " + (src.label || "the page") + "]" });
     }
 
-    async function addTab(tab, locked = false) {
-      if (!tab || tab === src) return;
-      const url = tab.linkedBrowser?.currentURI?.spec;
-      if (refs.some((r) => r.kind === "tab" && r.url === url)) return;
-      if (tab.linkedBrowser.documentContentType === "application/pdf") { // a PDF open in a tab: fetch the file itself
-        flashNote("Reading PDF…", true);
-        try {
-          const res = await fetch(url);
-          if (!res.ok) throw new Error("HTTP " + res.status);
-          await addPdfBuffer(await res.arrayBuffer(), (tab.label || "PDF").replace(/\.pdf$/i, "") + ".pdf", url);
-        } catch (e) { flashNote("Couldn't read that PDF tab."); }
-        return;
-      }
-      flashNote("Reading tab…", true);
-      try {
-        const data = await getPageText(tab.linkedBrowser);
-        const text = (data?.text || "").replace(/\s+/g, " ").trim().slice(0, 6000);
-        if (!text) { flashNote("Couldn't read that tab."); return; }
-        clearNote();
-        if (refs.some((r) => r.kind === "tab" && r.url === data.url)) return; // a quick double add
-        addContext({ kind: "tab", label: tab.label || data.title || "Tab", image: tab.image || "", url: data.url, text, locked });
-      } catch (e) { flashNote("Couldn't read that tab."); }
-    }
-    async function addGroup(group) {
-      const tabs = (group.tabs || []).filter((t) => t !== src && !t.pending && t.linkedBrowser && /^https?$/.test(t.linkedBrowser.currentURI?.scheme || ""));
-      if (!tabs.length) { flashNote("That group has no loaded tabs to read."); return; }
-      for (const t of tabs.slice(0, 6)) await addTab(t);
-      if (tabs.length > 6) flashNote(`Added 6 of ${tabs.length} tabs in “${group.label || "group"}”.`);
-    }
-
     // a PDF's bytes: Anthropic reads them natively (text + figures); other providers get extracted text
     async function addPdfBuffer(buf, name, url) {
       if (rawPdf()) {
         const dataUrl = await readDataUrl(new Blob([buf], { type: "application/pdf" }));
         clearNote();
-        addContext({ kind: "pdf", label: name, url, mime: "application/pdf", b64: dataUrl.split(",")[1], text: "[PDF: " + name + "]" });
+        addContext({ kind: "pdf", label: name, url, key: url, mime: "application/pdf", b64: dataUrl.split(",")[1], text: "[PDF: " + name + "]" });
         return true;
       }
       flashNote("Reading PDF…", true);
       const text = await pdfText(buf);
       if (!text) { flashNote("Couldn't read that PDF's text. AFM Server's apple.local model needs text; try copying the relevant passage into chat."); return false; }
       clearNote();
-      addContext({ kind: "file", label: name, url, text: text.slice(0, 24000) });
+      addContext({ kind: "file", label: name, url, key: url, text: text.slice(0, 24000) });
       return true;
     }
     async function addFile(f) {
@@ -2424,11 +2842,234 @@
       return Promise.all(others.map((t) => addTab(t, true)));
     }
 
-    // tabs that are actually loaded (skip lazy/discarded/restored-but-unloaded tabs) and on the web
-    // Zen tab wrappers do not expose linkedPanel consistently, so linkedBrowser is the reliable check.
-    const loadedTabs = () => gBrowser.tabs.filter((t) =>
-      t !== src && !t.pending && t.linkedBrowser && !t.hasAttribute?.("zen-empty-tab") && /^https?$/.test(t.linkedBrowser.currentURI?.scheme || ""));
+    // ----- tabs & links: one picker that stays open -----
+    // Every open web tab (sleeping ones too, they are fetched instead of read live) and every link on the page can be
+    // ticked in one panel. Cards appear the instant you tap, with a spinner until the text is in, and sending waits for
+    // any that are still reading.
+    const tabUrl = (t) => { try { return t.linkedBrowser?.currentURI?.spec || ""; } catch { return ""; } };
+    const isWebTab = (t) => { try { return !!t.linkedBrowser && !t.hasAttribute?.("zen-empty-tab") && /^https?$/.test(t.linkedBrowser.currentURI?.scheme || ""); } catch { return false; } };
+    const wsOf = (t) => { try { return t.getAttribute?.("zen-workspace-id") || ""; } catch { return ""; } };
+    const webTabs = () => gBrowser.tabs.filter((t) => t !== src && isWebTab(t)).sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+    const loadedTabs = webTabs;
+    const ago = (ms) => { const m = Math.round((Date.now() - ms) / 60000); return m < 1 ? "now" : m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; };
+    const keyOf = (r) => r.key || r.url;
+    const isOn = (key) => !!key && refs.some((r) => keyOf(r) === key);
+    const isLoading = (key) => refs.some((r) => keyOf(r) === key && r.loading);
+    const tabRefs = () => refs.filter((r) => r.kind === "tab" && !r.pageSource);
+
+    // runs a read for a card that is already on screen; if it fails the card goes away with a note
+    function readInto(ref, work) {
+      renderPills();
+      const job = (async () => {
+        try { await work(ref); }
+        catch (e) { if (refs.includes(ref)) { refs = refs.filter((x) => x !== ref); flashNote(`Couldn't read “${(ref.label || "that page").slice(0, 40)}”.`); } }
+        ref.loading = false;
+      })();
+      reading.add(job);
+      job.finally(() => { reading.delete(job); renderPills(); });
+      return job;
+    }
+    function addTab(tab, locked = false) {
+      if (!tab || tab === src) return Promise.resolve();
+      const key = tabUrl(tab);
+      if (!key || isOn(key)) return Promise.resolve();
+      if (refs.length >= MAX_REFS) { flashNote(`Up to ${MAX_REFS} attachments at a time.`); return Promise.resolve(); }
+      const ref = { id: ++refSeq, kind: "tab", key, label: tab.label || hostOf(key) || "Tab", image: tab.image || "", url: key, text: "", loading: true, locked };
+      refs.push(ref);
+      return readInto(ref, async () => {
+        if (tab.linkedBrowser?.documentContentType === "application/pdf" || /\.pdf(?:$|[?#])/i.test(key)) { // a PDF in a tab: fetch the file itself
+          const res = await fetch(key, { credentials: "include" });
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          if (!(await addPdfBuffer(await res.arrayBuffer(), (tab.label || "PDF").replace(/\.pdf$/i, "") + ".pdf", key))) throw new Error("no text");
+          refs = refs.filter((x) => x !== ref);
+          return;
+        }
+        let text = "", url = key;
+        if (!tab.pending) { // a live tab: read what is on screen
+          try { const d = await getPageText(tab.linkedBrowser); text = (d?.text || "").replace(/\s+/g, " ").trim(); url = d?.url || key; } catch {}
+        }
+        if (!text) { // a sleeping tab (or one that wouldn't answer): fetch the page itself
+          const pg = await fetchReadable(key, null, { credentials: "include", ms: 10000 });
+          if (pg.ok) text = ((pg.desc ? pg.desc + " " : "") + pg.text).replace(/\s+/g, " ").trim();
+        }
+        if (!text) throw new Error("empty");
+        if (!refs.includes(ref)) return; // removed while reading
+        if (refs.some((r) => r !== ref && r.kind === "tab" && r.url === url)) { refs = refs.filter((x) => x !== ref); return; }
+        ref.text = text.slice(0, 6000); ref.url = url;
+      });
+    }
+    // a link from the page, opened and read like a tab
+    function addLink(l) {
+      const key = l.url;
+      if (!key || isOn(key)) return Promise.resolve();
+      if (refs.length >= MAX_REFS) { flashNote(`Up to ${MAX_REFS} attachments at a time.`); return Promise.resolve(); }
+      const ref = { id: ++refSeq, kind: "tab", key, fromLink: true, label: l.title || hostOf(key), image: "page-icon:" + key, url: key, text: "", loading: true };
+      refs.push(ref);
+      return readInto(ref, async () => {
+        const pg = await fetchReadable(key, null, { ms: 10000 });
+        if (!pg.ok || !pg.text) throw new Error("unreadable");
+        if (!refs.includes(ref)) return;
+        ref.text = ((pg.desc ? pg.desc + " " : "") + pg.text).replace(/\s+/g, " ").trim().slice(0, 6000);
+        if (pg.title && (ref.label || "").length < 12) ref.label = pg.title.slice(0, 120);
+      });
+    }
+    function addGroup(group) {
+      const tabs = (group.tabs || []).filter((t) => t !== src && isWebTab(t));
+      if (!tabs.length) { flashNote("That group has no web tabs to read."); return; }
+      const room = Math.max(0, MAX_REFS - refs.length);
+      const fresh = tabs.filter((t) => !isOn(tabUrl(t)));
+      fresh.slice(0, room).forEach((t) => addTab(t));
+      if (fresh.length > room) flashNote(`Added ${room} of ${tabs.length} tabs in “${group.label || "group"}”.`);
+    }
     const tabGroupsList = () => { try { return [...(gBrowser.tabGroups || [])].filter((g) => (g.tabs || []).length); } catch { return []; } };
+    // the links on the page you are looking at (read once, kept until you navigate)
+    async function linksNow() {
+      if (page && !page.none && page.links) return page.links;
+      const key = srcUrl() || "";
+      if (!key || ytId(key)) return [];
+      if (linkCache.key === key) return linkCache.links;
+      try { const d = await getPageText(src.linkedBrowser); linkCache = { key, links: d.links || [], pending: false }; return linkCache.links; } catch { return []; }
+    }
+    const cachedLinks = () => (page && !page.none && page.links) || (linkCache.key === srcUrl() ? linkCache.links : null);
+
+    function closePicker() {
+      if (!picker) return;
+      picker.el.remove(); picker = null;
+      document.removeEventListener("pointerdown", onPickerDown, true);
+    }
+    const onPickerDown = (e) => { if (picker && !picker.el.contains(e.target) && !e.target.closest(".dia-add, .dia-tabsbtn")) closePicker(); };
+    function syncPicker() {
+      if (!picker) return;
+      for (const r of picker.rows) {
+        const on = isOn(r.item.key);
+        r.el.classList.toggle("dia-on", on);
+        r.el.classList.toggle("dia-loading", on && isLoading(r.item.key));
+        r.el.setAttribute("aria-pressed", String(on));
+      }
+      for (const c of picker.chips) c.el.classList.toggle("on", c.keys.length > 0 && c.keys.every(isOn));
+      const n = tabRefs().length;
+      picker.count.textContent = n ? `${n} added` : "Tap to add";
+      picker.clear.hidden = !n;
+      picker.segTabs.textContent = "Tabs";
+      picker.segLinks.textContent = picker.links ? `Links · ${picker.links.length}` : "Links";
+    }
+    function pickerItems() {
+      const term = picker.search.value.trim().toLowerCase();
+      const match = (...s) => !term || s.some((x) => (x || "").toLowerCase().includes(term));
+      if (picker.mode === "links") {
+        const links = (picker.links || []).filter((l) => match(l.title, l.url, l.ctx, l.section));
+        const mk = (l) => ({ key: l.url, label: l.title, sub: hostOf(l.url) + (l.ctx && l.ctx !== l.title ? "  ·  " + l.ctx.replace(l.title, "…").slice(0, 80) : ""), image: "page-icon:" + l.url, add: () => addLink(l) });
+        const refsL = links.filter((l) => l.kind === "ref"), body = links.filter((l) => l.kind === "in" || l.kind === "out"), nav = links.filter((l) => l.kind === "nav");
+        const groups = [["In the page", body], ["References", refsL], ["Site menu", nav]].filter(([, a]) => a.length);
+        return groups.flatMap(([name, a]) => (groups.length > 1 ? [{ sep: name }] : []).concat(a.map(mk)));
+      }
+      const mk = (t) => ({
+        key: tabUrl(t), label: t.label || hostOf(tabUrl(t)) || "Tab",
+        sub: [hostOf(tabUrl(t)), t.group?.label, t.pending ? "sleeping" : "", t.lastAccessed ? ago(t.lastAccessed) : ""].filter(Boolean).join("  ·  "),
+        image: t.image, add: () => addTab(t),
+      });
+      const all = webTabs().filter((t) => match(t.label, tabUrl(t)));
+      if (term) return all.map(mk);
+      const ws = wsOf(src);
+      const inGroup = src.group ? all.filter((t) => t.group === src.group) : [];
+      const here = all.filter((t) => !inGroup.includes(t) && (!ws || !wsOf(t) || wsOf(t) === ws));
+      const other = all.filter((t) => !inGroup.includes(t) && !here.includes(t));
+      const secs = [["In this group", inGroup], ["This space", here], ["Other spaces", other]].filter(([, a]) => a.length);
+      return secs.flatMap(([name, a]) => (secs.length > 1 ? [{ sep: name }] : []).concat(a.map(mk)));
+    }
+    function paintPicker() {
+      if (!picker) return;
+      const items = pickerItems();
+      picker.rows = []; picker.items = items.filter((it) => !it.sep);
+      const els = [];
+      if (picker.mode === "links" && !picker.links) els.push(h("div", { className: "dia-pk-empty" }, h("i", { className: "dia-spin dia-pk-spin" }), "Looking through the page…"));
+      else if (!items.length) els.push(h("div", { className: "dia-pk-empty", textContent: picker.search.value.trim() ? "Nothing matches." : picker.mode === "links" ? "No links found on this page." : "No other web tabs are open." }));
+      for (const it of items) {
+        if (it.sep) { els.push(h("div", { className: "dia-pk-sec", textContent: it.sep })); continue; }
+        const row = h("button", { className: "dia-pk-row", type: "button", title: it.label });
+        row.append(
+          it.image ? h("img", { className: "dia-pk-fav", src: it.image, onerror: (e) => e.target.replaceWith(icon("page")) }) : icon("page"),
+          h("span", { className: "dia-pk-main" }, h("span", { className: "dia-pk-title", textContent: it.label }), h("span", { className: "dia-pk-sub", textContent: it.sub || "" })),
+          h("span", { className: "dia-pk-check" }, icon("check")));
+        row.addEventListener("mousedown", (e) => e.preventDefault()); // keep typing in the search box
+        row.addEventListener("click", () => { picker.active = picker.rows.findIndex((r) => r.el === row); togglePicked(it); });
+        els.push(row);
+        picker.rows.push({ el: row, item: it });
+      }
+      picker.list.replaceChildren(...els);
+      picker.active = Math.min(picker.active, Math.max(0, picker.rows.length - 1));
+      markActive(false);
+      // quick chips: add a whole tab group in one tap
+      const chips = [];
+      picker.chips = [];
+      if (picker.mode === "tabs" && !picker.search.value.trim()) {
+        for (const g of tabGroupsList()) {
+          const tabs = (g.tabs || []).filter((t) => t !== src && isWebTab(t));
+          if (tabs.length < 2) continue;
+          const keys = tabs.map(tabUrl);
+          const el = h("button", { className: "dia-pk-chip", type: "button", title: `Add all ${tabs.length} tabs in this group` }, icon("folder"), h("span", { textContent: `${g.label || "Group"} · ${tabs.length}` }));
+          el.addEventListener("mousedown", (e) => e.preventDefault());
+          el.addEventListener("click", () => { if (keys.every(isOn)) { refs = refs.filter((r) => !keys.includes(keyOf(r)) || r.locked); renderPills(); } else addGroup(g); });
+          chips.push(el); picker.chips.push({ el, keys });
+        }
+      }
+      picker.chipRow.replaceChildren(...chips);
+      syncPicker();
+    }
+    function markActive(scroll = true) {
+      picker.rows.forEach((r, i) => r.el.classList.toggle("dia-active", i === picker.active));
+      if (scroll) picker.rows[picker.active]?.el.scrollIntoView({ block: "nearest" });
+    }
+    function togglePicked(it) {
+      if (isOn(it.key)) { refs = refs.filter((r) => keyOf(r) !== it.key || r.locked); renderPills(); }
+      else it.add();
+    }
+    function setPickerMode(mode) {
+      if (!picker) return;
+      picker.mode = mode;
+      picker.segTabs.classList.toggle("on", mode === "tabs");
+      picker.segLinks.classList.toggle("on", mode === "links");
+      picker.search.placeholder = mode === "links" ? "Search links on this page" : "Search open tabs";
+      picker.active = 0;
+      if (mode === "links" && !picker.links) {
+        const me = picker;
+        linksNow().then((l) => { if (picker === me) { picker.links = l; paintPicker(); } });
+      }
+      paintPicker();
+    }
+    function openPicker(mode = "tabs", q = "") {
+      closePop(); closePicker();
+      const search = h("input", { type: "text", value: q, placeholder: "Search open tabs", spellcheck: false });
+      const segTabs = h("button", { className: "on", type: "button", textContent: "Tabs", onclick: () => setPickerMode("tabs") });
+      const segLinks = h("button", { type: "button", textContent: "Links", onclick: () => setPickerMode("links") });
+      const chipRow = h("div", { className: "dia-pk-chips" });
+      const list = h("div", { className: "dia-pk-list", role: "listbox" });
+      const count = h("span", { className: "dia-pk-count" });
+      const addAll = h("button", { className: "dia-pk-btn", type: "button", textContent: "Add all", onclick: () => {
+        const room = Math.max(0, MAX_REFS - refs.length);
+        const todo = picker.items.filter((it) => !isOn(it.key));
+        todo.slice(0, room).forEach((it) => it.add());
+        if (todo.length > room) flashNote(`Added ${room}. Up to ${MAX_REFS} attachments at a time.`);
+      } });
+      const clear = h("button", { className: "dia-pk-btn", type: "button", textContent: "Clear", onclick: () => { refs = refs.filter((r) => r.kind !== "tab" || r.pageSource || r.locked); renderPills(); } });
+      const done = h("button", { className: "dia-pk-btn dia-pk-done", type: "button", textContent: "Done", onclick: () => { closePicker(); focusInput(); } });
+      for (const b of [segTabs, segLinks, addAll, clear, done]) b.addEventListener("mousedown", (e) => e.preventDefault());
+      const el = h("div", { className: "dia-menu dia-picker" },
+        h("div", { className: "dia-pk-top" }, h("div", { className: "dia-pk-seg" }, segTabs, segLinks), h("div", { className: "dia-search" }, icon("search"), search)),
+        chipRow, list, h("div", { className: "dia-pk-foot" }, count, clear, addAll, done));
+      composerEl.append(el);
+      picker = { el, search, list, chipRow, count, clear, segTabs, segLinks, mode: "tabs", rows: [], items: [], chips: [], active: 0, links: cachedLinks() };
+      search.addEventListener("input", () => { picker.active = 0; paintPicker(); });
+      search.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (picker.rows.length) { picker.active = (picker.active + (e.key === "ArrowDown" ? 1 : -1) + picker.rows.length) % picker.rows.length; markActive(); } }
+        else if (e.key === "Enter" || (e.key === " " && !search.value)) { e.preventDefault(); const r = picker.rows[picker.active]; if (r) togglePicked(r.item); }
+        else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closePicker(); focusInput(); }
+      });
+      setTimeout(() => { if (picker) document.addEventListener("pointerdown", onPickerDown, true); }, 0);
+      setPickerMode(mode);
+      setTimeout(() => search.focus(), 0);
+    }
+
     const snapshotTabs = () => gBrowser.tabs.filter((t) => !t.hidden && !t.hasAttribute?.("zen-empty-tab")).slice(0, 60);
     const tabListText = (tabs) => tabs.map((t, i) =>
       `${i + 1}. ${(t.label || "Untitled").slice(0, 80)} — ${t.linkedBrowser?.currentURI?.spec || ""}` +
@@ -2486,7 +3127,7 @@
       input?.focus();
       it.run?.();
     }
-    const tabItems = (tabs) => tabs.map((t) => ({ label: t.label || "Tab", image: t.image, ico: "page", sub: hostOf(t.linkedBrowser.currentURI?.spec), title: t.label || "", run: () => addTab(t) }));
+    const tabItems = (tabs) => tabs.map((t) => ({ label: t.label || "Tab", image: t.image, ico: "page", sub: isOn(tabUrl(t)) ? "Added" : hostOf(tabUrl(t)), title: t.label || "", run: () => addTab(t) }));
     const toolItems = (q) => {
       const out = [];
       if (!q || "tabs".startsWith(q) || "manage".startsWith(q)) out.push({ label: "@Tabs", ico: "folder", sub: "Manage open tabs", run: () => { manage = true; renderPills(); } });
@@ -2502,57 +3143,35 @@
     }
     function atMenu(start, q) {
       const match = (s) => !q || (s || "").toLowerCase().includes(q);
-      const matchingTabs = loadedTabs().filter((t) => match(t.label) || match(t.linkedBrowser.currentURI?.spec));
-      const tabs = matchingTabs.slice(0, 6);
+      const matchingTabs = webTabs().filter((t) => match(t.label) || match(tabUrl(t)));
+      const tabs = matchingTabs.slice(0, 8);
       const groups = tabGroupsList().filter((g) => match(g.label)).slice(0, 4);
       const fm = FORMATS.filter((f) => !q || f.name.startsWith(q));
       const tools = toolItems(q);
+      // links on the page: matches show up as you type (the page's links are read in the background the first time)
+      const lk = cachedLinks();
+      if (!lk && !linkCache.pending && srcUrl() && !ytId(srcUrl())) { linkCache.pending = true; linksNow().then(() => { linkCache.pending = false; }); }
+      const linkHits = lk && q.length >= 2 ? rankLinks(lk, q).filter((l) => l.s >= 2.5 && l.kind !== "nav").slice(0, 3) : [];
       const items = [];
       if (tabs.length) items.push({ sep: "Tabs" }, ...tabItems(tabs));
-      if (matchingTabs.length > 6) items.push({ label: "Browse all open tabs…", ico: "folder", sub: `${matchingTabs.length} matches`, run: openTabPicker });
+      if (linkHits.length) items.push({ sep: "Links on this page" }, ...linkHits.map((l) => ({ label: l.title, image: "page-icon:" + l.url, ico: "globe", sub: hostOf(l.url), title: l.url, run: () => addLink(l) })));
+      if (matchingTabs.length > 8 || lk?.length) items.push({ label: "Browse tabs & links…", ico: "folder", sub: matchingTabs.length > 8 ? `${matchingTabs.length} tabs` : "", run: () => openPicker("tabs", q) });
       if (groups.length) items.push({ sep: "Tab groups" }, ...groups.map((g) => ({ label: g.label || "Unnamed group", ico: "folder", sub: (g.tabs || []).length + " tabs", run: () => addGroup(g) })));
       if (fm.length) items.push({ sep: "Formats" }, ...fm.map((f) => ({ label: "@" + f.name, ico: "edit", sub: f.hint, run: () => { formats = formats.includes(f) ? formats : [...formats, f]; renderPills(); } })));
       if (tools.length) items.push({ sep: "Tools" }, ...tools);
       showPop("at", start, items);
     }
-    function openTabPicker() {
-      const q = h("input", { type: "text", placeholder: "Search open tabs" });
-      const body = h("div", { className: "dia-sheet-body" });
-      const paint = () => {
-        const term = q.value.trim().toLowerCase();
-        const tabs = loadedTabs().filter((t) => !term || (t.label || "").toLowerCase().includes(term) || (t.linkedBrowser.currentURI?.spec || "").toLowerCase().includes(term));
-        const rows = tabs.map((t) => {
-          const row = h("div", {
-            className: "dia-row-item",
-            onclick: () => { closeSheet(); addTab(t); },
-            onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); closeSheet(); addTab(t); } },
-          }, icon("page"), h("div", { className: "dia-row-main" },
-            h("div", { className: "dia-row-title", textContent: t.label || "Untitled tab" }),
-            h("div", { className: "dia-row-sub", textContent: hostOf(t.linkedBrowser.currentURI?.spec) || t.linkedBrowser.currentURI?.spec || "Web page" })));
-          row.setAttribute("role", "button");
-          row.tabIndex = 0;
-          return row;
-        });
-        body.replaceChildren(...(rows.length ? rows : [h("div", { className: "dia-empty-note", textContent: term ? "No open tabs match." : "No other loaded web tabs are available." })]));
-      };
-      openSheet("Add a tab", h("div", { className: "dia-search" }, icon("search"), q), body);
-      q.addEventListener("input", paint);
-      paint();
-      q.focus();
-    }
     function plusMenu() {
       if (pop?.trigger === "plus") { closePop(); return; }
-      closePop();
-      const tabs = loadedTabs().slice(0, 6);
-      const count = loadedTabs().length;
+      closePop(); closePicker();
+      const count = webTabs().length;
       const items = [
+        { label: "Add tabs & links…", ico: "folder", sub: count ? `${count} open` : "", run: () => openPicker("tabs") },
         { label: "Attach file or image…", ico: "clip", run: pickFile },
         { label: "Paste clipboard text", ico: "copy", run: pasteCard },
       ];
       if (!usePage && !started && srcUrl()) items.push({ label: "Add this page", ico: "page", run: () => { usePage = true; renderPills(); } });
       items.push({ label: webOn ? "Turn off web search" : "Search the web", ico: "globe", run: () => setWeb(!webOn) });
-      items.push({ label: "Add an open tab…", ico: "folder", sub: count ? `${count} available` : "Choose from your loaded web tabs", run: openTabPicker });
-      if (tabs.length) items.push({ sep: "Quick add  ·  or type @" }, ...tabItems(tabs));
       items.push({ sep: "Skills  ·  or type /" }, { label: "Browse skills…", ico: "spark", run: () => openSkills() }, { label: "New skill…", ico: "plus", run: () => openSkills(true) });
       items.push({ sep: "Tools" }, ...toolItems(""));
       showPop("plus", -1, items);
@@ -2602,7 +3221,7 @@
       const fm = (m.formats || []).map((id) => FORMATS.find((f) => f.id === id)?.prompt).filter(Boolean);
       if (fm.length) t += "\n\n" + fm.join(" ");
       for (const r of m.refs || []) {
-        if (r.kind === "image" || sendsRaw(r)) continue;
+        if (r.kind === "image" || sendsRaw(r) || r.loading) continue;
         const cap = r.kind === "file" ? (apple ? 3000 : 20000) : apple ? 2000 : 8000;
         t += `\n\n=== ${refHead(r)} ===\n${(r.text || "").slice(0, cap)}`;
       }
@@ -2624,22 +3243,26 @@
       if (includePage && page?.youtube && !/\btimestamp|\bmoment|\bchapter|time ?code|mm:ss|\bjump to\b/i.test(req)) {
         ctx = ctx.replace(/^\[\d{1,2}:\d{2}(?::\d{2})?\]\s*/gm, "").replace(/ \(each line is prefixed with its \[mm:ss\] timestamp\)/, "");
       }
-      const linkBlock = includePage && page.links?.length
-        ? `\n\n=== LINKS EMBEDDED IN THIS PAGE ===\n${page.links.slice(0, 20).map((x, i) => `[${i + 1}] ${x.title} — ${x.url}`).join("\n")}`
-        : "";
-      const pageBlock = includePage ? `=== PAGE THE USER IS VIEWING ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${ctx}${linkBlock}` : "";
-      if (provider() === "apple") {
+      const apple = provider() === "apple";
+      // the page's links, most relevant to this request first. On the small model the links get their own share of the
+      // window: they used to sit after the page text and were cut off by its limit, so the model never saw them.
+      // (follow-up turns carry the page as its removable card instead, so the links stay for as long as the page does)
+      const linksOn = !!(page && !page.none && page.links?.length && (includePage || (lastU?.refs || []).some((r) => r.pageSource)));
+      const linkTxt = linksOn ? linksPrompt(page.links, req, apple ? (webCtx ? 420 : 760) : 7000, apple ? 8 : 40, apple) : "";
+      const pageBlock = includePage ? `=== PAGE THE USER IS VIEWING ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${ctx}${linkTxt}` : linkTxt.trim();
+      if (apple) {
         const upto = resuming ? convo : convo.slice(0, convo.lastIndexOf(lastU));
         const transcript = upto.slice(-2).map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${(m.label || m.content).slice(0, 500)}`).join("\n");
         const fit = (text, limit) => text.length <= limit ? text : text.slice(0, limit - 44) + "\n[…context shortened for the on-device model]";
-        const budget = webCtx ? 3000 : 4200;
-        const pageContext = includePage ? (deep ? fit(`=== PAGE THE USER IS VIEWING (notes from reading all of it) ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${deep}${linkBlock}`, budget) : fit(pageBlock, budget)) : "";
-        const webContext = webCtx ? fit(webCtx.text, 1800) : "";
+        const budget = webCtx ? 2200 : 4200;
+        const body = deep ? `=== PAGE THE USER IS VIEWING (notes from reading all of it) ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${deep}` : `=== PAGE THE USER IS VIEWING ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${ctx}`;
+        const pageContext = includePage ? fit(body, Math.max(900, budget - linkTxt.length)) + linkTxt : linkTxt.trim();
+        const webContext = webCtx ? fit(webCtx.text, 2600) : "";
         const ask = resuming ? "Continue your previous answer exactly where it stopped, without repeating it." : userText(lastU || { content: req }, true);
         return {
           system: systemPrompt(), pageBlock: "", web: false,
           messages: [{ role: "user", content:
-            (pageContext ? "Use the web page below to respond to the user's request." + (effort() <= 2 ? " Be concise." : "") + "\n\n" + pageContext + "\n\n" : "") +
+            (pageContext ? (includePage ? "Use the web page below to respond to the user's request." + (effort() <= 2 ? " Be concise." : "") + "\n\n" : "") + pageContext + "\n\n" : "") +
             (webContext ? webContext + "\n\n" : "") +
             (transcript ? `=== CONVERSATION SO FAR ===\n${transcript}\n\n` : "") + `=== REQUEST ===\n${ask}` }],
         };
@@ -2824,35 +3447,35 @@
       const prior = opts.resume ? convo.at(-1) : null; // the partial assistant message being continued
       const block = opts.block || h("div", { className: "dia-msg dia-ai" });
       block.classList.add("dia-streaming");
+      block.classList.remove("dia-pending");
       block.querySelector(".dia-actions")?.remove();
       block.querySelector(".dia-sources")?.remove();
+      if (opts.resume) { block.querySelector(".dia-flow")?.remove(); block._flow = null; }
       let answerEl = block.querySelector(".dia-answer");
       if (!answerEl) { answerEl = h("div", { className: "dia-answer" }); block.append(answerEl); }
-      let dots = h("div", { className: "dia-dots" }, h("i"), h("i"), h("i")); // "thinking" until the first token
-      block.append(dots);
+      const flow = block._flow || (block._flow = makeFlow(block, answerEl));
+      flow.wait(); // from the first moment something is alive on screen
       if (!block.isConnected) logEl.append(block);
       renderQueue();
       scrollDown(true);
       let acc = prior ? prior.content : "";
-      let failed = false, thinkEl = null, thinkBody = null, thinkAcc = "", statusEl = null;
+      let failed = false, thinkEl = null, thinkBody = null, thinkAcc = "", thinkT0 = 0, answerStarted = false, paintTimer = null;
       let webCtx = prior?.webText ? { text: prior.webText } : null, searchInfo = null; // fallback web search (models without a built-in tool)
       let cites = citesOf(prior);
       const qset = new Set(), srcMap = new Map();
-      const t0 = Date.now();
       const seek = isVid() ? seekFn() : null;
       const wantTs = /\btimestamp|\bmoment|\bchapter|time ?code|mm:ss|\bjump to\b/i.test([...convo].reverse().find((m) => m.role === "user")?.content || "");
       const clean = (t) => (page?.youtube && seek ? scrubStamps(wantTs ? snapToChapters(t, page.chapters) : t, page.seconds, wantTs) : t);
-      const dropDots = () => { if (dots) { dots.remove(); dots = null; } };
-      const setStatus = (t) => { dropDots(); if (!statusEl) { statusEl = h("div", { className: "dia-status" }); block.append(statusEl); } statusEl.textContent = t; };
-      const clearStatus = () => { statusEl?.remove(); statusEl = null; };
+      const view = (t) => expandLinkRefs(t, page?.links); // [L3] -> a real link
       const onThink = (d) => {
         thinkAcc += d;
         if (!thinkEl) {
+          thinkT0 = Date.now();
           thinkBody = h("div", { className: "dia-think-body" });
           thinkEl = h("details", { className: "dia-think dia-live", open: true }, h("summary", {}, icon("chev"), h("span", { textContent: "Thinking…" })), thinkBody);
           block.insertBefore(thinkEl, answerEl);
         }
-        dropDots();
+        flow.dropQuiet();
         thinkBody.textContent = thinkAcc;
         thinkBody.scrollTop = thinkBody.scrollHeight;
         if (nearBottom()) scrollDown(false);
@@ -2861,35 +3484,55 @@
         if (!thinkEl || !thinkEl.classList.contains("dia-live")) return;
         thinkEl.classList.remove("dia-live");
         thinkEl.open = false;
-        thinkEl.querySelector("summary span").textContent = `Thought for ${Math.max(1, Math.round((Date.now() - t0) / 1000))}s`;
+        thinkEl.querySelector("summary span").textContent = `Thought for ${Math.max(1, Math.round((Date.now() - thinkT0) / 1000))}s`;
       };
-      // Reveal the answer in whole multi-line chunks: hold streamed text back until ~3 lines have piled
-      // up, then render up to `end` and ease the new block in together (settled text stays solid).
-      const CHUNK_LINES = 3;
+      // Text appears as it arrives, a few words at a time, each new slice easing in. A slice never ends inside a word or
+      // inside **bold**, `code`, a [link](…) or a [L3] label, so nothing flashes half-formed, and a timer makes sure
+      // the last words show up even when the stream pauses.
       let shown = acc.length, lastPaint = 0;
+      const settle = () => { if (answerStarted) return; answerStarted = true; endThink(); flow.end("done"); };
       const paint = (end = acc.length) => {
         if (end <= shown) return;
-        dropDots();
+        settle();
         const stick = nearBottom();
-        renderMd(answerEl, acc.slice(0, end), seek, shown, cites);
+        renderMd(answerEl, view(acc.slice(0, end)), seek, view(acc.slice(0, shown)).length, cites);
         shown = end;
+        lastPaint = Date.now();
         if (stick) scrollDown(false);
       };
-      const chunkEnd = () => {
-        let n = 0;
-        for (let i = shown; i < acc.length; i++) if (acc[i] === "\n" && ++n >= CHUNK_LINES) return i + 1;
-        return -1;
+      const revealEnd = (force) => {
+        let end = acc.length;
+        if (!force && !/\s$/.test(acc)) end = acc.search(/\S*$/); // only whole words
+        const ls = acc.lastIndexOf("\n", end - 1) + 1, cur = acc.slice(ls, end);
+        let cut = -1;
+        const lim = (i) => { if (i >= 0 && (cut < 0 || i < cut)) cut = i; };
+        if ((cur.match(/`/g) || []).length % 2) lim(cur.lastIndexOf("`"));
+        if ((cur.match(/\*\*/g) || []).length % 2) lim(cur.lastIndexOf("**"));
+        if ((cur.match(/~~/g) || []).length % 2) lim(cur.lastIndexOf("~~"));
+        const ob = cur.lastIndexOf("[");
+        if (ob >= 0 && cur.indexOf("]", ob) < 0) lim(ob);
+        const lk = cur.search(/\[[^\[\]]*\]\([^)\s]*$/);
+        if (lk >= 0) lim(lk);
+        if (cut >= 0) end = ls + cut;
+        return end > shown ? end : -1;
       };
+      const flush = () => {
+        paintTimer = null;
+        let e = revealEnd(false);
+        if (e < 0 && Date.now() - lastPaint > 2500) e = revealEnd(true); // never sit on text for long
+        if (e > 0) paint(e);
+      };
+      const schedule = () => { if (!paintTimer) paintTimer = setTimeout(flush, Math.max(0, 110 - (Date.now() - lastPaint))); };
       const finalRender = (text) => {
         const { text: body, actions } = extractActions(text);
         renderMd(answerEl, body, seek, Infinity, cites); // final solid pass, no fade boundary
         block.querySelector(".dia-act")?.remove();
         if (actions) { const card = actionCard(actions); if (card) block.append(card); }
       };
-      if (prior) renderMd(answerEl, acc, seek, Infinity, cites);
+      if (prior) renderMd(answerEl, view(acc), seek, Infinity, cites);
       try {
         if (!llmReady()) {
-          dropDots();
+          flow.dropQuiet();
           acc = extractive(page?.text || "") || "Couldn't find enough text on this page to summarize.";
           renderMd(answerEl, acc, seek);
           answerEl.append(h("div", { className: "dia-note", textContent: "Offline summary. This model needs an API key: open the model menu at the top of the sidebar and edit it." }));
@@ -2900,34 +3543,58 @@
           // the model writes a query, we search, read the top pages and hand them back as numbered sources.
           // questions that are plainly about the page itself never need a search, so skip the extra routing call
           const askText = lastU?.label || lastU?.content || "";
-          const linkSearch = WANTS_PAGE_LINKS.test(askText);
+          const intent = linkIntent(askText);
+          const linkSearch = intent.wants;
           const skipRouter = !linkSearch && !lastU?.web && !heur && (askText.trim().length < 6 || ABOUT_PAGE.test(askText));
           const firstU = convo.find((m) => m.role === "user");
           const searchPage = (lastU === firstU && lastU?.pageContext === false) ? null : page;
           const runFallback = async () => {
             if (skipRouter) return;
+            const apple = provider() === "apple";
+            const cap = apple ? 1100 : 3500;
+            const pageLinks = searchPage?.links || [];
             try {
-              const route = await planSearch(convo, searchPage, !!lastU?.web || heur || linkSearch, signal);
-              const cap = provider() === "apple" ? 900 : 3500;
-              if (route.links?.length) {
-                setStatus("Searching links on this page…");
-                const results = await readPageLinks(route.links, signal, cap);
-                webCtx = { text: webBlock("links embedded in " + (searchPage?.title || "the current page"), results, cap) };
-                searchInfo = { query: "Links from " + (searchPage?.title || "the current page"), sources: results.map((r) => ({ title: r.title, url: r.url })) };
+              let picks = [], query = "";
+              // 1) cheap local pass: explicit URLs, "the third source", a link named in the question, keyword overlap
+              const local = pageLinks.length || intent.urls.length ? pickLinks(pageLinks, askText, intent, apple ? 3 : 4) : { picks: [], candidates: [], confident: false };
+              if (intent.wants && local.picks.length && local.confident) {
+                picks = local.picks;
+                const why = local.picks[0].why;
+                flow.note(why === "url" ? "Using the link you gave" : why === "ordinal" ? "Found the link you meant" : `Matched ${picks.length === 1 ? "a link" : picks.length + " links"} on this page`, { kind: "links" });
+              } else {
+                // 2) the model chooses from a short candidate list (or decides to search the web, or to do nothing)
+                const step = flow.begin(local.candidates.length ? `Looking through ${pageLinks.length} links on this page` : intent.wants ? "Deciding what to open" : "Deciding whether to look anything up", { kind: "plan", done: "Chose what to look at" });
+                const route = await planSearch(convo, searchPage, !!lastU?.web || heur || intent.wants, signal, local.candidates);
+                if (route.links.length) { picks = route.links; step.done(`Picked ${picks.length} link${picks.length > 1 ? "s" : ""}`); }
+                else if (intent.wants && local.picks.length) { picks = local.picks; step.done(`Picked ${picks.length} link${picks.length > 1 ? "s" : ""}`); }
+                else if (route.query && (webMode() !== "off" || lastU?.web)) { query = route.query; step.done("Decided to search the web"); } // never a web search when the user turned it off
+                else step.drop();
+              }
+              if (picks.length) {
+                const step = flow.begin(picks.length === 1 ? `Opening ${hostOf(picks[0].url) || picks[0].title}` : `Opening ${picks.length} linked pages`, { kind: "read" });
+                const chips = picks.map((l) => step.chip({ url: l.url, label: hostOf(l.url) || l.title }));
+                const results = await readLinkPages(picks, signal, { cap, query: askText, chips, step, notes: apple && effort() >= 2 });
+                const ok = results.filter((r) => !r.failed).length;
+                step.done(ok === results.length ? (ok === 1 ? `Read ${hostOf(results[0].url) || "the page"}` : `Read ${ok} linked pages`) : `Read ${ok} of ${results.length} linked pages`);
+                const from = searchPage?.title || "the current page";
+                webCtx = { text: webBlock("from " + from, results, cap, true) };
+                searchInfo = { query: "Links from " + from, sources: results.map((r) => ({ title: r.title, url: r.url })) };
                 cites = searchInfo.sources;
-              } else if (route.query) {
-                const q = route.query;
-                setStatus(`Searching the web for “${q}”…`);
-                const results = await webSearch(q, signal);
-                setStatus("Reading sources…");
-                await readSources(results, signal, cap);
-                webCtx = { text: webBlock(q, results, cap) };
-                searchInfo = { query: q, sources: results.map((r) => ({ title: r.title, url: r.url })) };
+              } else if (query) {
+                const s1 = flow.begin(`Searching the web for “${query}”`, { kind: "search", done: `Searched for “${query}”` });
+                const results = await webSearch(query, signal);
+                s1.done();
+                const s2 = flow.begin("Reading the top results", { kind: "read" });
+                const chips = results.slice(0, 3).map((r) => s2.chip({ url: r.url, label: hostOf(r.url) || r.title }));
+                await readSources(results, signal, cap, query, chips);
+                s2.done(`Read ${results.slice(0, 3).filter((r) => r.text).length} results`);
+                webCtx = { text: webBlock(query, results, cap) };
+                searchInfo = { query, sources: results.map((r) => ({ title: r.title, url: r.url })) };
                 cites = searchInfo.sources;
               }
             } catch (e) {
-              if (e.name === "AbortError") throw e;
-              clearStatus();
+              if (signal.aborted) throw e;
+              flow.active?.fail?.();
               block.insertBefore(h("div", { className: "dia-note", textContent: "Couldn't search the web: " + e.message }), answerEl);
             }
           };
@@ -2936,43 +3603,70 @@
           // High effort on the small on-device model: read the whole page in parts, keep notes for this question
           let deep = null;
           if (provider() === "apple" && effort() >= 3 && !prior && lastU === firstU && lastU?.pageContext !== false && page && !page.none && page.text.length > chunkSize() * 1.3) {
-            try { deep = (await deepRead(lastU?.content || pref("prompt", DEFAULT_PROMPT), page.text, signal, (i, n) => setStatus(`Reading the page in parts (${i}/${n})…`))) || null; }
-            catch (e) { if (e.name === "AbortError") throw e; deep = null; }
-            clearStatus();
+            const ds = flow.begin("Reading the whole page in parts", { kind: "read", done: "Read the whole page" });
+            try { deep = (await deepRead(lastU?.content || pref("prompt", DEFAULT_PROMPT), page.text, signal, (i, n) => ds.set(`Reading the page in parts (${i}/${n})`))) || null; }
+            catch (e) { if (signal.aborted) throw e; deep = null; }
+            ds.done();
           }
+          const setStatus = (t) => flow.begin(t, { kind: "refine", done: /^Draft/.test(t) ? "Drafted an answer" : "Refined the answer" });
           for (let attempt = 0; ; attempt++) {
             try {
               let reqNow = buildRequest(!!prior, webCtx, deep);
-              if (provider() === "apple" && effort() >= 4 && !prior) reqNow = await refineRequest(reqNow, signal, setStatus); // Max: draft first, then stream the improved answer
+              if (provider() === "apple" && effort() >= 4 && !prior) { // Max: draft first, then stream the improved answer
+                reqNow = await refineRequest(reqNow, signal, setStatus);
+                if (flow.active?.state === "active") flow.active.done();
+              }
+              if (reqNow.web && reqNow.forceWeb) flow.begin("Searching the web", { kind: "search", done: "Searched the web" });
+              else flow.wait();
               for await (const ev of streamLLM(reqNow, signal)) {
                 if (ev.t === "think") { onThink(ev.d); continue; }
-                if (ev.t === "status") { setStatus(ev.d); continue; }
-                if (ev.t === "query") { qset.add(ev.d); continue; }
-                if (ev.t === "sources") { for (const s of ev.d) srcMap.set(s.url, s); continue; }
-                endThink(); clearStatus();
+                if (ev.t === "status") {
+                  if (answerStarted) flow.note(ev.d, { kind: "misc" });
+                  else flow.begin(ev.d, { kind: /search/i.test(ev.d) ? "search" : "misc", done: /^Searching the web/i.test(ev.d) ? "Searched the web" : "" });
+                  continue;
+                }
+                if (ev.t === "query") {
+                  qset.add(ev.d);
+                  const a = flow.active;
+                  if (a && a.kind === "search" && a.state === "active" && !answerStarted) { a.set(`Searching “${ev.d}”`); a.doneText = `Searched “${ev.d}”`; }
+                  else flow.note(`Searched “${ev.d}”`, { kind: "search" });
+                  continue;
+                }
+                if (ev.t === "sources") {
+                  for (const s of ev.d) srcMap.set(s.url, s);
+                  const st = [...flow.steps].reverse().find((s) => s.kind === "search");
+                  if (st && !st.chipped) {
+                    st.chipped = true;
+                    for (const s of ev.d.slice(0, 4)) {
+                      const redirect = /vertexaisearch|googleusercontent/.test(hostOf(s.url));
+                      st.chip({ url: s.url, label: (redirect ? s.title : hostOf(s.url)) || hostOf(s.url) || "source", icon: redirect ? (/^[\w.-]+\.[a-z]{2,}$/i.test(s.title || "") ? "page-icon:https://" + s.title : "") : "" }).done();
+                    }
+                  }
+                  continue;
+                }
+                endThink();
                 acc = acc.length > 20 && ev.d.startsWith(acc) ? ev.d : acc + ev.d; // tolerate cumulative streams
-                const now = Date.now();
-                const end = chunkEnd();
-                if (end > 0) { lastPaint = now; paint(end); }
-                else if (acc.length - shown >= 500) { lastPaint = now; paint(); }
-                else if (acc.length > shown && now - lastPaint >= 1800) { lastPaint = now; paint(); }
+                schedule();
               }
               break;
             } catch (e) {
               // the built-in search tool was refused before any answer: remember it and search from the browser instead
-              if (e.webUnavailable && attempt === 0 && !acc && !prior && wantsSearch) { searchBroken.add(provider()); clearStatus(); await runFallback(); continue; }
+              if (e.webUnavailable && attempt === 0 && !acc && !prior && wantsSearch) { searchBroken.add(provider()); await runFallback(); continue; }
               throw e;
             }
           }
-          endThink(); clearStatus();
+          clearTimeout(paintTimer); paintTimer = null;
+          endThink();
           paint();
-          acc = clean(acc);
+          acc = view(clean(acc));
           finalRender(acc);
         }
       } catch (e) {
-        dropDots(); clearStatus(); endThink();
+        clearTimeout(paintTimer); paintTimer = null;
+        endThink();
         if (e.name === "AbortError") {
-          if (stopped && acc) finalRender(acc);
+          if (stopped) { if (acc) { acc = view(acc); finalRender(acc); } }
+          else if (my === gen) { failed = true; block.append(h("p", { className: "dia-error", textContent: "That took too long and was cancelled. Try again." })); }
         } else {
           failed = true;
           const unreachable = e instanceof TypeError;
@@ -2995,6 +3689,7 @@
           }
         }
       }
+      flow.end(failed ? "failed" : stopped ? "stopped" : "done");
       generating = false;
       if (closed || my !== gen) return;
       if (acc && !failed) {
@@ -3008,7 +3703,6 @@
         if (webCtx) entry.webText = webCtx.text; // kept in memory so Resume doesn't search again
         blockEntry.set(block, entry);
       }
-      dropDots();
       block.classList.remove("dia-streaming");
       if (acc && !failed) {
         const srow = sourcesRow(blockEntry.get(block));
@@ -3030,7 +3724,7 @@
       if (!generating) { // still reading the page
         gen++;
         setBusy(false);
-        logEl?.querySelectorAll(".dia-status").forEach((n) => n.remove());
+        logEl?.querySelectorAll(".dia-pending").forEach((n) => { n._flow?.end("stopped"); n.remove(); });
         if (sendNext) { drainAfter = false; drainQueue(); }
       }
     }
@@ -3053,17 +3747,25 @@
       ctrl?.abort();
       const my = ++gen;
       setBusy(true);
-      const status = h("div", { className: "dia-msg dia-status", textContent: ytId(url) ? "Fetching video captions…" : "Reading page…" });
-      logEl.append(status);
+      // the answer's block exists from the first moment, so "Reading this page" is already visible and the same
+      // activity list simply carries on into searching / thinking / writing
+      const block = h("div", { className: "dia-msg dia-ai dia-pending" });
+      const flow = (block._flow = makeFlow(block, null));
+      const video = !!ytId(url);
+      const rd = flow.begin(video ? "Fetching the video captions" : "Reading this page", { kind: "read", done: video ? "Read the captions" : "Read the page" });
+      const pd0 = pageData();
+      const chip = rd.chip({ url, label: (pd0?.label || hostOf(url) || "this page").slice(0, 40), icon: pd0?.image });
+      logEl.append(block);
       scrollDown(true);
       try {
         page = await getPageText(src.linkedBrowser);
       } catch (e) {
-        if (closed || my !== gen) return;
+        if (closed || my !== gen) { flow.end("stopped"); return; }
         if (entry.pageContext === false) {
           page = { none: true, title: "", url: "", text: "" };
           pageRefPromoted = true;
-          status.remove();
+          flow.end("stopped");
+          block.remove();
           convo.push(entry);
           renderPills();
           generate();
@@ -3071,28 +3773,28 @@
         }
         const msg = e.noCaptions
           ? "This video has no captions available, so there's no transcript to read."
-          : `Couldn't read this ${ytId(url) ? "video" : "page"}: ${e.message}`;
-        status.replaceWith(h("p", { className: "dia-msg dia-error", textContent: msg }));
+          : `Couldn't read this ${video ? "video" : "page"}: ${e.message}`;
+        chip.fail();
+        flow.end("failed");
+        block.replaceWith(h("p", { className: "dia-msg dia-error", textContent: msg }));
         setBusy(false);
         return;
       }
-      if (closed || my !== gen) { if (!closed) page = null; return; }
+      if (closed || my !== gen) { flow.end("stopped"); if (!closed) page = null; return; }
       page.text = page.text.slice(0, MAX_CHARS * 2);
       ctrl = new AbortController();
-      try {
-        const size = chunkSize();
-        if (page.text.length > size) status.textContent = "Condensing…";
-        page.context = pageCtx();
-      } catch (e) { page.context = page.text.slice(0, chunkSize()); }
+      try { page.context = pageCtx(); } catch (e) { page.context = page.text.slice(0, chunkSize()); }
+      chip.done();
+      rd.done();
+      if (page.links?.length) flow.note(`Found ${page.links.length} link${page.links.length === 1 ? "" : "s"} on the page`, { kind: "links" });
       pageRefPromoted = true;
       if (!refs.some((r) => r.pageSource)) {
         const pd = pageData() || { label: page.title || page.url, image: src.image };
         refs.push({ id: ++refSeq, kind: "tab", pageSource: true, label: page.title || pd.label, url: page.url || url, image: pd.image, text: page.text });
       }
       renderPills();
-      status.remove();
       convo.push(entry);
-      generate();
+      generate({ block });
     }
 
     // ----- sending -----
@@ -3109,6 +3811,11 @@
       return { q, label: label || q, raw: opts.text !== undefined ? "" : input.value.trim(), skill: sk, fromSkill: !!sk || !!opts.label, refs, formats, manage, web: webOn, usePage: usePage && !!srcUrl() };
     }
     function submit(opts = {}) {
+      if (reading.size) { // a tab or link card is still reading: send as soon as it is in
+        flashNote("Finishing reading your tabs…", true);
+        Promise.allSettled([...reading]).then(() => { clearNote(); if (!closed) submit(opts); });
+        return;
+      }
       if (opts.text === undefined && !skill) { // typing a skill's name and pressing Return runs it, no slash needed
         const t = input.value.trim().toLowerCase();
         const m = t && skillsFor(isVid()).find((s) => s.name.toLowerCase() === t);
@@ -3118,7 +3825,7 @@
       if (!snap) return;
       if (opts.text === undefined) { input.value = ""; autosize(); }
       refs = []; skill = null; formats = []; manage = false; // the composer empties (snapshot keeps the old ones)
-      closePop();
+      closePop(); closePicker();
       if (busy) { queue.push(snap); renderQueue(); renderPills(); return; }
       dispatch(snap);
     }
@@ -3151,7 +3858,7 @@
       const strip = (r) => ({ kind: r.kind, label: r.label, url: r.url, text: r.kind === "image" || r.kind === "pdf" ? "" : (r.text || "").slice(0, 2500) });
       store.upsert({
         id: chatId, ts: Date.now(), title: chatTitle || "Chat", url: page?.url || srcUrl() || "",
-        page: page && !page.none ? { title: page.title, url: page.url, text: page.text.slice(0, 20000), links: (page.links || []).slice(0, 30), youtube: !!page.youtube, seconds: page.seconds, chapters: page.chapters } : null,
+        page: page && !page.none ? { title: page.title, url: page.url, text: page.text.slice(0, 20000), links: (page.links || []).slice(0, 60).map((l) => ({ ...l, ctx: (l.ctx || "").slice(0, 140) })), youtube: !!page.youtube, seconds: page.seconds, chapters: page.chapters } : null,
         msgs: convo.map((m) => m.role === "user"
           ? { role: "user", content: m.content, label: m.label, formats: m.formats, refs: (m.refs || []).map(strip), pageContext: m.pageContext }
           : { role: "assistant", content: m.content, sources: m.sources, queries: m.queries, numbered: m.numbered }),
@@ -3193,7 +3900,7 @@
       if (wasSetup) { try { Services.prefs.setBoolPref(PREF + "setupdone", true); } catch {} }
     }
     function openSheet(title, ...body) {
-      closeSheet(); closeHMenu();
+      closeSheet(); closeHMenu(); closePicker();
       sheetEl = h("div", { className: "dia-sheet" },
         h("div", { className: "dia-sheet-head" }, h("span", { textContent: title }), h("button", { className: "dia-icon", title: "Close", onclick: closeSheet }, icon("close"))),
         ...body);
@@ -3585,7 +4292,7 @@
       gen++;
       page = null; convo = []; refs = []; queue = []; started = false; generating = false;
       chatId = null; chatTitle = ""; pageRefPromoted = false; usePage = !!srcUrl() && bool("attachpage", true); skill = null; formats = []; manage = false; webOn = false;
-      closePop(); closeHMenu(); closeSheet(); clearNote();
+      closePop(); closePicker(); closeHMenu(); closeSheet(); clearNote();
       if (input) { input.value = ""; autosize(); }
       logEl.replaceChildren();
       setBusy(false);
@@ -3655,12 +4362,13 @@
       webBtnEl = h("button", { className: "dia-icon dia-webbtn", title: "Force web search for this chat (works with AFM).", onclick: () => setWeb(!webOn) }, icon("globe"));
       webBtnEl.setAttribute("aria-label", "Toggle web search");
       webBtnEl.setAttribute("aria-pressed", "false");
+      const tabsBtn = h("button", { className: "dia-icon dia-tabsbtn", title: "Add tabs and page links as context", onclick: (e) => { e.stopPropagation(); if (picker) closePicker(); else openPicker("tabs"); } }, icon("tabs"));
       const camBtn = h("button", { className: "dia-icon dia-cam", title: "Capture this page", onclick: () => addCapture() }, icon("camera"));
-      for (const b of [addBtn, webBtnEl, camBtn]) b.addEventListener("mousedown", (e) => e.preventDefault()); // keep typing focus in the box
+      for (const b of [addBtn, tabsBtn, webBtnEl, camBtn]) b.addEventListener("mousedown", (e) => e.preventDefault()); // keep typing focus in the box
       composerEl = h("div", { className: "dia-composer" }, cardsEl, pillsEl, input,
-        h("div", { className: "dia-row" }, h("div", { className: "dia-row-left" }, addBtn, webBtnEl), h("div", { className: "dia-row-right" }, camBtn, sendBtn)));
+        h("div", { className: "dia-row" }, h("div", { className: "dia-row-left" }, addBtn, tabsBtn, webBtnEl), h("div", { className: "dia-row-right" }, camBtn, sendBtn)));
       const dropzone = h("div", { className: "dia-dropzone" }, icon("drop"), h("span", { textContent: "Drop to add as context" }), h("small", { textContent: "Files, tabs or tab groups" }));
-      panel = h("div", { className: "dia-panel", hidden: true }, head, logEl, h("div", { className: "dia-foot" }, composerEl), dropzone);
+      panel = h("div", { className: "dia-panel", hidden: true }, head, h("div", { className: "dia-progress" }), logEl, h("div", { className: "dia-foot" }, composerEl), dropzone);
       // drag files, tabs (from the tab strip or Zen's sidebar) or whole tab groups onto the sidebar
       const over = (e) => {
         if (!isDroppable(e)) return;
@@ -3680,8 +4388,8 @@
         const dt = e.dataTransfer;
         const { tabs, groups } = tabsFromDrop(dt);
         const files = [...(dt.files || [])];
-        for (const g of groups) await addGroup(g);
-        for (const t of tabs) await addTab(t);
+        for (const g of groups) addGroup(g);
+        tabs.forEach((t) => addTab(t)); // cards appear at once and read in parallel
         if (files.length) await addFiles(files);
         if (!tabs.length && !groups.length && !files.length) flashNote("Drop a file, or drag a tab onto the sidebar.");
         focusInput();
@@ -3717,7 +4425,7 @@
       if (want && was) { autosize(); if (wantFocus) focusInput(); }
       updateDock();
     }
-    function dismiss() { userHidden = true; closePop(); closeHMenu(); sync(); }
+    function dismiss() { userHidden = true; closePop(); closePicker(); closeHMenu(); sync(); }
     function restore() { userHidden = false; sync(); focusInput(); }
 
     function close(immediate) {
@@ -3725,7 +4433,7 @@
       closed = true;
       gen++;
       ctrl?.abort();
-      closePop();
+      closePop(); closePicker();
       closeHMenu();
       try { mm?.removeMessageListener(SEL_MSG, onSelection); } catch {}
       sessions.delete(src);
