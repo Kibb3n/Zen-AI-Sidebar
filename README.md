@@ -246,7 +246,7 @@ its original name and restart.
 
 1. The sidebar only opens on a web page. On a new tab the URL bar icon is dimmed on purpose. Open a site first.
 2. Hover the URL bar: the chat icon appears on hover. No icon at all means the script isn't running: check the two Sine steps above.
-3. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see `[dia-sidebar] loaded v2.8.0`. A
+3. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see `[dia-sidebar] loaded v2.9.0`. A
    wrong script filename shows up as `[Sine]: Failed to load script`. If clicking the icon does nothing on a page, look for
    `[dia-sidebar] couldn't open the sidebar` and the error under it.
 
