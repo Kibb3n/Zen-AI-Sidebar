@@ -1,59 +1,7 @@
 [
   {
     "type": "separator",
-    "label": "**Chat**"
-  },
-  {
-    "property": "mod.dia-sidebar.search",
-    "label": "Web search",
-    "type": "dropdown",
-    "defaultValue": "auto",
-    "placeholder": false,
-    "options": [
-      {
-        "label": "Automatic, when a question needs it",
-        "value": "auto"
-      },
-      {
-        "label": "Only when I ask (+ menu or @Web)",
-        "value": "manual"
-      },
-      {
-        "label": "Off",
-        "value": "off"
-      }
-    ]
-  },
-  {
-    "type": "separator",
-    "label": "**Search provider**\n*Configured alternatives are tried automatically if a search is unavailable or rate-limited.*"
-  },
-  {
-    "property": "mod.dia-sidebar.searchengine",
-    "label": "Preferred search provider",
-    "type": "dropdown",
-    "defaultValue": "duckduckgo",
-    "placeholder": false,
-    "options": [
-      { "label": "DuckDuckGo", "value": "duckduckgo" },
-      { "label": "Google Search", "value": "google" },
-      { "label": "Brave Search", "value": "brave" },
-      { "label": "SearXNG", "value": "searxng" }
-    ]
-  },
-  {
-    "property": "mod.dia-sidebar.searchkey",
-    "label": "Brave Search API key (optional fallback)",
-    "type": "string",
-    "defaultValue": "",
-    "placeholder": "Paste your Brave Search API key"
-  },
-  {
-    "property": "mod.dia-sidebar.searxurl",
-    "label": "SearXNG address (optional fallback)",
-    "type": "string",
-    "defaultValue": "",
-    "placeholder": "https://your-searxng.example"
+    "label": "**Chat**\n*The assistant only searches the internet while the globe button is on. Otherwise it uses just the page you're on and the links on that page.*"
   },
   {
     "property": "mod.dia-sidebar.autosummarize",
@@ -81,6 +29,49 @@
     "label": "Press Enter to send (off: Cmd/Ctrl+Enter sends)",
     "type": "checkbox",
     "defaultValue": true
+  },
+  {
+    "type": "separator",
+    "label": "**Search provider**\n*Used when the globe is on. Configured alternatives are tried automatically if a search is unavailable or rate-limited.*"
+  },
+  {
+    "property": "mod.dia-sidebar.searchengine",
+    "label": "Preferred search provider",
+    "type": "dropdown",
+    "defaultValue": "duckduckgo",
+    "placeholder": false,
+    "options": [
+      {
+        "label": "DuckDuckGo",
+        "value": "duckduckgo"
+      },
+      {
+        "label": "Google Search",
+        "value": "google"
+      },
+      {
+        "label": "Brave Search",
+        "value": "brave"
+      },
+      {
+        "label": "SearXNG",
+        "value": "searxng"
+      }
+    ]
+  },
+  {
+    "property": "mod.dia-sidebar.searchkey",
+    "label": "Brave Search API key (optional fallback)",
+    "type": "string",
+    "defaultValue": "",
+    "placeholder": "Paste your Brave Search API key"
+  },
+  {
+    "property": "mod.dia-sidebar.searxurl",
+    "label": "SearXNG address (optional fallback)",
+    "type": "string",
+    "defaultValue": "",
+    "placeholder": "https://your-searxng.example"
   },
   {
     "type": "separator",

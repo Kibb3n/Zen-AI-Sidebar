@@ -14,7 +14,7 @@
   const SEL_MSG = "dia-sidebar:selection";
   const MAX_CHARS = 24000;
   const MAX_REFS = 12;
-  const VERSION = "2.4.0";
+  const VERSION = "2.6.0";
   const DEFAULT_PROMPT = "Summarize this page into concise bullet points.";
   const SYSTEM =
     "You are an AI assistant living in a sidebar next to the web page the user is viewing. " +
@@ -46,16 +46,23 @@
   const SEARCH_NUDGE =
     "You have a live web search tool. Use it automatically, without asking permission, whenever the answer depends on current, recent or outside information " +
     "(news, prices, scores, weather, people, companies, products, software versions, events, anything described as latest or current) or whenever you are not sure. " +
-    "Do not search for questions about the page itself, rewriting, translating, math, or timeless knowledge.";
+    "Do not search for questions about the page itself, rewriting, translating, math, or timeless knowledge. " +
+    "When you do need to look something up, first say one short, friendly sentence about what the page already tells them (or doesn't) and that you're checking further, then search, then carry on with the answer.";
   // For models without a built-in search tool: one quick call decides whether (and what) to search
   const ROUTER_SYSTEM =
-    "You decide whether a browser assistant must search the web to answer the user's latest message. " +
-    "Reply with exactly NO, SEARCH: followed by one concise web search query (max 12 words), or LINKS: followed by up to 3 comma-separated link numbers. " +
-    "When the user explicitly asks to search/read/follow links embedded in the current page, choose relevant numbered links from the supplied page-link list and reply LINKS: numbers. " +
-    "Answer NO for questions about the page the user is viewing, rewriting, summarizing, translating, math, coding help, or timeless general knowledge. " +
-    "Answer SEARCH for news, recent or changing facts, prices, products, people or companies you may not know, or when the user asks to look something up online. Never add anything else.";
+    "You help a browser assistant decide whether it must look further than the page the user is viewing to answer their latest message. " +
+    "Reply with exactly NO when the page excerpt (or general knowledge, rewriting, summarizing, translating, math, coding help) is enough. " +
+    "Otherwise reply with two lines. First line: SAY: one short, casual sentence in the first person (max 25 words) saying what the page does or doesn't tell them about their question and that you're going to look further. " +
+    "If you are not sure what the page says, just say you'll look it up. Second line: SEARCH: followed by one concise web search query (max 12 words), or LINKS: followed by up to 3 comma-separated numbers from the supplied page-link list. " +
+    "Choose LINKS when the user asks about a link embedded in the page and one of the listed links fits. " +
+    "Choose a search for news, recent or changing facts, prices, products, people or companies you may not know, facts the page doesn't contain, or when the user asks to look something up online. Never add anything else.";
+  const ROUTER_LINKS =
+    "You help a browser assistant decide whether it should open links that are embedded in the page the user is viewing, to answer their latest message. You may only use the numbered links in the supplied list: there is no web search. " +
+    "Reply with exactly NO when the page excerpt is enough. Otherwise reply with two lines. First line: SAY: one short, casual sentence in the first person (max 25 words) saying what the page does or doesn't tell them and that you'll check a link on the page. " +
+    "Second line: LINKS: followed by up to 3 comma-separated numbers from the list (when the user asks to open or read links, pick the most relevant ones). Never add anything else.";
   const ROUTER_FORCED =
-    "Use the recent chat and supplied page-link list to act on the user's latest message. If they explicitly ask to search/read/follow links embedded in the current page, select up to 3 relevant numbered links and reply exactly LINKS: followed by their numbers. Otherwise write the single best web search query (max 12 words) and reply exactly SEARCH: followed by the query. Never add anything else.";
+    "Act on the user's latest message using the recent chat, the page excerpt and the supplied page-link list. Reply with two lines. First line: SAY: one short, casual first-person sentence (max 25 words) about what the page already tells them, if anything, and that you're going to look further. " +
+    "Second line: if they ask to search/read/follow links embedded in the current page, LINKS: followed by up to 3 relevant numbers from the list; otherwise SEARCH: followed by the single best web search query (max 12 words). Never add anything else.";
   // @formats: steer the shape of the answer
   const FORMATS = [
     { id: "list", name: "list", hint: "Bulleted list", prompt: "Format the answer as a concise bulleted list." },
@@ -80,6 +87,7 @@
     stop: "M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5z",
     history: "M8 3.2a4.8 4.8 0 1 1-4.5 3.2M2.6 3v3.4H6M8 5.6V8l1.7 1.1",
     plus: "M8 3.5v9M3.5 8h9",
+    minus: "M3.5 8h9",
     clip: "M10.8 6.2L6.6 10.4a1.3 1.3 0 0 0 1.9 1.9l4.3-4.3a2.8 2.8 0 0 0-4-4L4.6 8.3a4.3 4.3 0 0 0 6.1 6.1l2-2",
     spark: "M6.5 2.5l1.2 3.3 3.3 1.2-3.3 1.2-1.2 3.3-1.2-3.3L2 7l3.3-1.2zM12 9.5l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z",
     edit: "M3 13l.7-2.8 6.9-6.9a1.4 1.4 0 0 1 2 2L5.8 12.3z",
@@ -128,10 +136,14 @@
   position: relative; flex: 0 0 var(--dia-w, 400px); width: var(--dia-w, 400px); min-width: 0; min-height: 0; max-height: 100%; align-self: stretch; contain: size;
   margin-inline-start: var(--zen-element-separation, 8px);
   box-sizing: border-box; display: flex; flex-direction: column;
-  color: var(--fg); background: var(--panel); background-attachment: fixed;
+  /* No paint of its own: like Zen's tab sidebar, the sidebar is transparent over the space's own background, so it is exactly
+     the colour of the space (gradient and all) and follows each space and light/dark. Only the neutral colour option, and the
+     floating fallback (which overlays the page), get a solid panel. */
+  color: var(--fg); background: transparent;
   font: var(--dia-fs, 14px)/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased;
   border-radius: calc(var(--zen-native-inner-radius, 12px) / var(--zen-squircle-value, 1)); corner-shape: round;
-  box-shadow: var(--zen-big-shadow, 0 2px 10px rgba(0, 0, 0, 0.14));
+  box-shadow: none;
+  &[data-accent="neutral"], &.dia-float { background: var(--panel); background-attachment: fixed; box-shadow: var(--zen-big-shadow, 0 2px 10px rgba(0, 0, 0, 0.14)); }
   animation: dia-slide 0.32s var(--ease);
   &[hidden] { display: none; }
   &[data-side="left"] { margin-inline-start: 0; margin-inline-end: var(--zen-element-separation, 8px); animation-name: dia-slide-l; }
@@ -224,7 +236,7 @@
   .dia-note { font-size: 12px; color: var(--mute); margin-top: 4px; }
   .dia-error { color: var(--danger); word-break: break-word; margin: 0; }
   /* while an answer is being written: a soft breathing dot at the end of the text */
-  .dia-streaming .dia-answer > p:last-child::after, .dia-streaming .dia-answer > ul:last-child > li:last-child::after, .dia-streaming .dia-answer > ol:last-child > li:last-child::after {
+  .dia-streaming .dia-answer:not(.dia-seg-done) > p:last-child::after, .dia-streaming .dia-answer:not(.dia-seg-done) > ul:last-child > li:last-child::after, .dia-streaming .dia-answer:not(.dia-seg-done) > ol:last-child > li:last-child::after {
     content: ""; display: inline-block; width: 7px; height: 7px; margin-inline-start: 5px; border-radius: 50%; background: var(--accent); vertical-align: 0.06em; animation: dia-breathe 1.2s ease-in-out infinite; }
   .dia-chunk-in { animation: dia-chunk 0.42s var(--ease) both; }
   .dia-think { margin: 0 0 10px; font-size: 13px; color: var(--mute); }
@@ -234,26 +246,46 @@
   .dia-think[open] summary .dia-svg { transform: none; }
   .dia-think-body { margin-top: 6px; padding-inline-start: 12px; border-inline-start: 2px solid var(--line); white-space: pre-wrap; max-height: 180px; overflow-y: auto; scrollbar-width: thin; }
 
-  /* the agent's activity: every step it takes shows up here live (reading the page, picking links, searching, thinking),
-     then folds into a one-line summary you can open again */
+  /* the agent's activity, shown the way Dia does it: ONE compact pill for whatever it is doing right now (Reading 1
+     attachment, Searching the web…, or three dots while it thinks). When a step is finished it settles into a muted line
+     ("Read 1 attachment"). Click either to open the full list of steps; click again to minimise it. */
   .dia-progress { position: relative; flex: none; height: 2px; margin: 0 18px; border-radius: 2px; overflow: hidden; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
   .dia-progress::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 38%; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: dia-sweep 1.4s cubic-bezier(0.45, 0, 0.25, 1) infinite; }
   .dia-working .dia-progress { opacity: 1; }
   .dia-working .dia-composer { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
   .dia-send { position: relative; }
   .dia-working .dia-send::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--accent); border-right-color: color-mix(in srgb, var(--accent) 35%, transparent); animation: dia-spin 0.9s linear infinite; pointer-events: none; }
-  .dia-flow { margin: 0 0 12px; font-size: 13px; line-height: 18px; color: var(--mute); }
+  .dia-flow { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 0 0 10px; font-size: 13.5px; line-height: 18px; color: var(--mute); }
   .dia-flow[hidden] { display: none; }
-  .dia-flow-head { appearance: none; border: 0; background: transparent; display: flex; align-items: center; gap: 5px; max-width: 100%; padding: 2px 6px 2px 0; border-radius: 8px; cursor: pointer; color: inherit; font: inherit; line-height: 18px; }
-  .dia-flow-head:hover { color: var(--fg); }
-  .dia-flow-head .dia-svg { width: 12px; height: 12px; transform: rotate(-90deg); transition: transform 0.25s var(--ease); }
-  .dia-flow.dia-open .dia-flow-head .dia-svg { transform: none; }
-  .dia-flow.dia-open .dia-flow-head { margin-bottom: 8px; }
-  .dia-flow.dia-live .dia-flow-head { display: none; }
-  .dia-flow-sum { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  .dia-flow-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.32s var(--ease); }
-  .dia-flow.dia-open .dia-flow-body, .dia-flow.dia-live .dia-flow-body { grid-template-rows: 1fr; }
+  .dia-flow-sum { appearance: none; border: 0; background: transparent; display: flex; align-items: center; gap: 7px; max-width: 100%; padding: 2px 6px 2px 0; border-radius: 8px; cursor: pointer; color: inherit; font: inherit; font-weight: 500; line-height: 18px; animation: dia-step-in 0.3s var(--ease) both; }
+  .dia-flow-sum[hidden] { display: none; }
+  .dia-flow-sum:hover { color: var(--fg); }
+  .dia-flow-sum > .dia-sum-ico { display: flex; flex: none; }
+  .dia-flow-sum .dia-svg { width: 14px; height: 14px; flex: none; }
+  .dia-flow-sum .dia-chev { width: 12px; height: 12px; opacity: 0.5; transform: rotate(-90deg); transition: transform 0.25s var(--ease), opacity 0.15s; }
+  .dia-flow-sum:hover .dia-chev { opacity: 1; }
+  .dia-flow.dia-open .dia-flow-sum .dia-chev { transform: none; opacity: 1; }
+  .dia-flow-sumtext { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .dia-flow-pill { appearance: none; border: 0; display: inline-flex; align-items: center; gap: 9px; max-width: 100%; box-sizing: border-box; padding: 8px 15px 8px 11px; border-radius: 999px; background: var(--glass); color: var(--mute); cursor: pointer; font: inherit; font-size: var(--dia-fs, 14px); line-height: 20px; transition: background-color 0.15s; }
+  .dia-flow-pill[hidden], .dia-flow.dia-open .dia-flow-pill { display: none; }
+  .dia-flow-pill:hover { background: color-mix(in srgb, var(--fg) 17%, transparent); }
+  .dia-flow-pill.dia-pill-pop { animation: dia-pill-in 0.3s var(--ease) both; }
+  .dia-pill-ico { display: flex; flex: none; }
+  .dia-pill-ico .dia-svg { width: 16px; height: 16px; }
+  .dia-pill-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dia-pill-time { flex: none; font-size: 12px; font-variant-numeric: tabular-nums; opacity: 0.7; }
+  .dia-pill-time:empty { display: none; }
+  .dia-favs { display: flex; flex: none; padding-inline-start: 7px; }
+  .dia-favs img { width: 20px; height: 20px; box-sizing: border-box; border-radius: 50%; margin-inline-start: -7px; border: 2px solid color-mix(in srgb, var(--fg) 14%, #202226); background: #fff; object-fit: contain; animation: dia-pop 0.3s var(--ease) both; }
+  .dia-dots { display: inline-flex; align-items: center; gap: 5px; padding: 6px 4px; }
+  .dia-dots i { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: dia-wave 1.2s ease-in-out infinite; }
+  .dia-dots i:nth-child(2) { animation-delay: 0.15s; }
+  .dia-dots i:nth-child(3) { animation-delay: 0.3s; }
+  /* the full list of steps, opened on demand */
+  .dia-flow-body { display: grid; grid-template-rows: 0fr; width: 100%; transition: grid-template-rows 0.32s var(--ease); }
+  .dia-flow.dia-open .dia-flow-body { grid-template-rows: 1fr; }
   .dia-flow-list { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
+  .dia-flow.dia-open .dia-flow-list { padding: 2px 0 2px 2px; }
   .dia-step { display: flex; align-items: flex-start; gap: 9px; animation: dia-step-in 0.34s var(--ease) both; }
   .dia-step-ico { flex: none; width: 16px; height: 18px; display: grid; place-items: center; }
   .dia-step-ico .dia-svg { width: 14px; height: 14px; stroke-width: 2.2; }
@@ -268,8 +300,8 @@
   .dia-step-time { flex: none; font-size: 12px; font-variant-numeric: tabular-nums; opacity: 0.7; }
   .dia-step.dia-done .dia-step-text, .dia-step.dia-stopped .dia-step-text { color: var(--mute); }
   .dia-step.dia-fail .dia-step-text { color: var(--danger); }
-  /* the live step's text carries a light sweep, so the panel never looks frozen */
-  .dia-step.dia-active .dia-step-text, .dia-think.dia-live summary span {
+  /* whatever is running carries a light sweep across its text, so nothing ever looks frozen */
+  .dia-step.dia-active .dia-step-text, .dia-pill-text, .dia-think.dia-live summary span {
     background: linear-gradient(100deg, var(--mute) 32%, var(--fg) 50%, var(--mute) 68%) 100% 0 / 260% 100% no-repeat;
     -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; animation: dia-shimmer 1.7s linear infinite; }
   .dia-step-chips { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -302,16 +334,20 @@
   .dia-foot { flex: none; padding: 6px 14px 14px; }
   .dia-composer { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 12px 12px 10px 14px; border: 1px solid var(--line); border-radius: 26px; background: var(--glass); backdrop-filter: blur(14px); transition: border-color 0.2s; }
   .dia-composer:focus-within { border-color: color-mix(in srgb, var(--fg) 28%, transparent); }
-  .dia-cards { display: flex; flex-wrap: wrap; gap: 8px; max-height: min(196px, 24vh); overflow-y: auto; scrollbar-width: thin; }
+  .dia-cards { display: flex; flex-wrap: wrap; gap: 8px; max-height: min(196px, 24vh); overflow-y: auto; scrollbar-width: thin; padding: 8px 8px 0 0; margin: -8px -8px 0 0; }
   .dia-cards:empty { display: none; }
   .dia-card { position: relative; display: flex; align-items: center; gap: 12px; max-width: 100%; box-sizing: border-box; padding: 8px 36px 8px 8px; border-radius: 16px; background: var(--glass); animation: dia-in 0.25s var(--ease) both; }
   .dia-card-static { padding-right: 10px; }
   .dia-card.dia-off { opacity: 0.48; filter: grayscale(1); background: color-mix(in srgb, #858585 14%, var(--glass)); }
   .dia-card.dia-page-toggle { transition: opacity 0.15s, filter 0.15s, background-color 0.15s; }
-  .dia-page-switch { appearance: none; flex: none; cursor: pointer; border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--fg); font: inherit; font-size: 11px; line-height: 1.2; }
-  .dia-page-switch:hover { background: color-mix(in srgb, var(--accent) 30%, transparent); }
-  .dia-card.dia-off .dia-page-switch { background: var(--soft2); color: var(--mute); }
-  .dia-page-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* the page you are on: a small round minimise button on the chip's corner (hover), instead of an X. Minimising leaves the
+     page out of the first message (the chip greys out); the button then becomes a plus that puts it back. */
+  .dia-card.dia-page-toggle { padding-right: 12px; }
+  .dia-page-min { position: absolute; top: -7px; right: -7px; z-index: 1; appearance: none; border: 0; padding: 0; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+    background: var(--fg); color: var(--on-accent, #fff); box-shadow: 0 1px 5px rgba(0, 0, 0, 0.35); opacity: 0; transform: scale(0.8); transition: opacity 0.15s, transform 0.15s var(--ease); }
+  .dia-page-min .dia-svg { width: 11px; height: 11px; stroke-width: 2.4; }
+  .dia-card:hover .dia-page-min, .dia-page-min:focus-visible, .dia-card.dia-off .dia-page-min { opacity: 1; transform: none; }
+  .dia-page-min:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .dia-card-thumb { width: 38px; height: 48px; flex: none; border-radius: 9px; overflow: hidden; display: grid; place-items: center; background: var(--soft2); color: var(--mute); }
   .dia-card-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
   .dia-card-thumb img.dia-card-fav { width: 20px; height: 20px; object-fit: contain; border-radius: 4px; }
@@ -402,7 +438,8 @@
   .dia-head .dia-layout.dia-open { background: var(--soft); color: var(--fg); }
 
   /* history / skills sheet */
-  .dia-sheet { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--panel); background-attachment: fixed; border-radius: inherit; animation: dia-in 0.25s var(--ease) both; }
+  .dia-sheet { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: transparent; border-radius: inherit; animation: dia-in 0.25s var(--ease) both; }
+  &[data-accent="neutral"] .dia-sheet, &.dia-float .dia-sheet { background: var(--panel); background-attachment: fixed; }
   .dia-sheet-head { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; padding: 12px 10px 6px 18px; font-weight: 600; font-size: 13px; }
   .dia-sheet-head span { flex: 1; }
   .dia-panel.dia-sheeted > :not(.dia-sheet):not(.dia-dropzone):not(.dia-hmenu) { visibility: hidden; } /* never let the chat show through a sheet */
@@ -499,6 +536,8 @@
 @keyframes dia-step-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes dia-draw { to { stroke-dashoffset: 0; } }
 @keyframes dia-pop { from { transform: scale(0.3); } 60% { transform: scale(1.35); } to { transform: scale(1); } }
+@keyframes dia-wave { 0%, 60%, 100% { opacity: 0.35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+@keyframes dia-pill-in { from { opacity: 0; transform: translateY(5px) scale(0.97); } to { opacity: 1; transform: none; } }
 @keyframes dia-fade { from { opacity: 0; } to { opacity: 1; } }
 /* the chat button inside the URL bar (in Zen, the URL bar sits at the top of the left sidebar).
    Icon: Ionicons "chatbubble-ellipses" (MIT), the glyph Zen ships for its own chat icon.
@@ -522,8 +561,8 @@
 @keyframes dia-nudge { 20%, 60% { transform: translateX(-2px); } 40%, 80% { transform: translateX(2px); } }
 @media (prefers-reduced-motion: reduce) {
   #dia-dock, #dia-dock * { animation-duration: 1ms !important; animation-delay: 0s !important; transition-duration: 1ms !important; }
-  #dia-dock .dia-spin, #dia-dock .dia-chipsrc > i, #dia-dock .dia-progress::before, #dia-dock .dia-send::after, #dia-dock .dia-streaming .dia-answer *::after { animation: none !important; }
-  #dia-dock .dia-step.dia-active .dia-step-text, #dia-dock .dia-think.dia-live summary span { animation: none !important; background: none !important; -webkit-text-fill-color: currentColor; color: var(--fg); }
+  #dia-dock .dia-spin, #dia-dock .dia-chipsrc > i, #dia-dock .dia-dots i, #dia-dock .dia-progress::before, #dia-dock .dia-send::after, #dia-dock .dia-streaming .dia-answer *::after { animation: none !important; }
+  #dia-dock .dia-step.dia-active .dia-step-text, #dia-dock .dia-pill-text, #dia-dock .dia-think.dia-live summary span { animation: none !important; background: none !important; -webkit-text-fill-color: currentColor; color: var(--fg); }
 }
 `;
 
@@ -591,12 +630,10 @@
   const EFFORT_NAMES = ["Low", "Medium", "High", "Max"];
   const thinkBudget = () => (isNative() ? [0, 1024, 8192, 24576][effort() - 1] : 0);
   const reasoningEffort = () => ["low", "medium", "high", "high"][effort() - 1];
-  // "auto" (default, like Dia): the assistant searches the web by itself whenever the question needs it.
-  // "manual": only when you turn the globe on / use @Web. "off": never.
-  const webMode = () => {
-    const v = pref("search", "auto");
-    return v === "manual" || v === "off" ? v : "auto";
-  };
+  // The internet is only ever searched when the globe is on for that message (or @Web). Without it the assistant works from
+  // the page that is already loaded and the links on that page, nothing else. (The old Automatic / Only when I ask / Off
+  // setting is gone: it is always "manual" now, whatever an older version saved.)
+  const webMode = () => "manual";
   // if Anthropic/Gemini reject their built-in search tool (plan, region, model), we search from the browser instead
   const searchBroken = new Set(); // providers whose built-in search tool was refused (remembered per provider)
   // messages that are clearly about live / outside information search even if the model wouldn't have chosen to
@@ -615,9 +652,30 @@
     "Give thorough, well-structured answers with the relevant detail and context (this overrides the instruction to be brief).",
     "Give thorough, well-structured answers with the relevant detail and context (this overrides the instruction to be brief). Work through the question carefully and check your answer against the page and any sources before you reply.",
   ];
+  // Apple Intelligence talks like a normal chatbot: friendly flowing paragraphs, no bullet lists, and more detail the higher
+  // the effort. (Other models keep the concise, structured style above.)
+  const APPLE_SYSTEM =
+    "You are a friendly AI assistant living in a sidebar next to the web page the user is viewing. " +
+    "Talk the way a good chatbot does in a normal conversation: warm, natural, plain language, in full sentences and short paragraphs, like a knowledgeable friend explaining something. " +
+    "Use the page content and anything the user attached. Start with the actual answer, then give the useful context. " +
+    "Write in flowing paragraphs: do not use bullet points, numbered lists, headings or tables unless the user clearly asks for a list, steps or a table. " +
+    "Bold at most a key term or two. If the page does not contain the answer, say so plainly and then say what you can. Never make up details.";
+  const APPLE_STYLES = [
+    "Keep it short: one or two friendly sentences.",
+    "Answer in one or two short, natural paragraphs.",
+    "Give a full, detailed answer the way a thorough chatbot would: several natural paragraphs that explain the key points and why they matter, add useful context, and give an example where it helps. Don't be brief, and don't turn it into a list.",
+    "Give a full, detailed answer the way a thorough chatbot would: several natural paragraphs that explain the key points and why they matter, add useful context, and give an example where it helps. Check what you say against the page and any sources, and mention anything the page doesn't cover. Don't be brief, and don't turn it into a list.",
+  ];
+  // the built-in prompts ask for bullets; on Apple Intelligence they ask for a friendly summary instead
+  const chatty = (s) => s
+    .replace(/Summarize this page into concise bullet points\./, "Give me a friendly summary of this page.")
+    .replace(/Summarize this video in 5-7 concise bullet points\./, "Give me a friendly summary of this video.")
+    .replace(/Answer in a few concise bullet(?:s| points)( with no timestamps)?\./, (m, ts) => "Talk me through them conversationally" + (ts ? ", with no timestamps." : "."))
+    .replace(/\b(?:in )?(?:\d+-\d+ |a few )?concise bullet(?:ed)? points?\b/gi, "in a few friendly paragraphs");
   const systemPrompt = () => {
-    let s = SYSTEM;
-    const style = STYLES[effort() - 1];
+    const apple = provider() === "apple";
+    let s = apple ? APPLE_SYSTEM : SYSTEM;
+    const style = (apple ? APPLE_STYLES : STYLES)[effort() - 1];
     if (style) s += "\n\n" + style;
     const lang = pref("language", "").trim();
     if (lang) s += `\n\nAlways reply in ${lang}, whatever language the page or the question is in.`;
@@ -1900,8 +1958,8 @@
     };
     for (const m of t.matchAll(new RegExp(`\\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|\\d{1,3}(?:st|nd|rd|th))\\s+(?:\\w+\\s+)?${LNOUN}\\b`, "gi"))) add(m[1], m[2]);
     for (const m of t.matchAll(new RegExp(`\\b${LNOUN}\\s*(?:#|no\\.?\\s*|number\\s*)?\\[?(\\d{1,3})\\]?(?!\\d)`, "gi"))) add(m[2], m[1]);
-    const wants = !!(urls.length || ord.length || LINK_NEAR.test(t) || LINKED_THING.test(t) || LEARN_MORE.test(t) || WANTS_PAGE_LINKS.test(t));
-    return { wants, urls, ord };
+    const textWants = !!(ord.length || LINK_NEAR.test(t) || LINKED_THING.test(t) || LEARN_MORE.test(t) || WANTS_PAGE_LINKS.test(t));
+    return { wants: textWants || urls.length > 0, textWants, urls, ord };
   }
 
   // relevance of every link to a request, from its text, the words around it, its heading and its address
@@ -2134,7 +2192,7 @@
   // Asks the model whether to search the web or open some of the page's links; returns { query } or { links }.
   // Only a short, locally ranked candidate list is shown (never all of the page's links), which is what lets a 4,096-token
   // model choose well.
-  async function planSearch(convo, page, forced, signal, candidates = []) {
+  async function planSearch(convo, page, forced, signal, candidates = [], allowSearch = true) {
     const last = [...convo].reverse().find((m) => m.role === "user");
     const msg = (last?.label || last?.content || "").slice(0, 400);
     const recent = convo.slice(-5, -1).map((m) => `${m.role}: ${(m.label || m.content || "").slice(0, 200)}`).join("\n");
@@ -2142,16 +2200,20 @@
     const linkList = options.length
       ? `Links embedded in the current page (choose by number):\n${options.map((x, i) => `${i + 1}. ${x.title.slice(0, 80)} (${hostOf(x.url)})${x.ctx && x.ctx !== x.title ? " — " + x.ctx.slice(0, 90) : ""}`).join("\n")}\n`
       : "";
-    const ctx = `Today is ${new Date().toDateString()}.\n` + (page?.title ? `Page: ${page.title}\n` : "") + linkList + (recent ? `Recent chat:\n${recent}\n` : "") + `User message: ${msg}`;
+    const excerpt = page?.text ? focusText(page.text, msg, provider() === "apple" ? 900 : 2500) : "";
+    const ctx = `Today is ${new Date().toDateString()}.\n` + (page?.title ? `Page: ${page.title}\n` : "") + (excerpt ? `Page excerpt:\n${excerpt}\n` : "") + linkList + (recent ? `Recent chat:\n${recent}\n` : "") + `User message: ${msg}`;
     let out = "";
-    try { out = await askOnce(forced ? ROUTER_FORCED : ROUTER_SYSTEM, ctx, signal, true); } catch (e) { if (signal?.aborted) throw e; }
+    try { out = await askOnce(!allowSearch ? ROUTER_LINKS : forced ? ROUTER_FORCED : ROUTER_SYSTEM, ctx, signal, true); } catch (e) { if (signal?.aborted) throw e; }
+    const sm = out.match(/SAY:\s*(.+)/i);
+    const say = (sm?.[1] || "").trim().replace(/^["“]+|["”]+$/g, "").replace(/\s+(?:SEARCH|LINKS):.*$/i, "").slice(0, 220);
     const lm = options.length ? out.match(/LINKS:\s*([\d,\s]+)/i) : null;
     const links = lm ? [...new Set((lm[1].match(/\d+/g) || []).map(Number))].filter((n) => n > 0 && n <= options.length).slice(0, 3).map((n) => options[n - 1]) : [];
-    if (links.length) return { query: "", links };
+    if (links.length) return { query: "", links, say };
+    if (!allowSearch) return { query: "", links: [], say: "" }; // no globe: never a web query
     const m = out.match(/SEARCH:\s*(.+)/i);
     const q = (m?.[1] || "").trim().replace(/^["“'`]+|["”'`.]+$/g, "").slice(0, 200);
-    if (q) return { query: q, links: [] };
-    return { query: forced ? msg.replace(/\s+/g, " ").slice(0, 200) : "", links: [] };
+    if (q) return { query: q, links: [], say };
+    return { query: forced ? msg.replace(/\s+/g, " ").slice(0, 200) : "", links: [], say: forced ? say : "" };
   }
 
   // ---------- markdown -> DOM ----------
@@ -2301,25 +2363,80 @@
     return { text: text.replace(m[0], "").trim(), actions: Array.isArray(actions) ? actions : null };
   }
 
-  // ---------- activity flow: what the agent is doing, live, above its answer ----------
-  // Every stage (reading the page, picking links, opening them, searching, drafting, thinking) is a step with a spinner and
-  // a light text sweep while it runs, a check when it is done, and a favicon chip per page it touches. When the answer starts
-  // the steps fold into a one-line summary ("Read the page · Read 3 linked pages · 4.2s") that opens again on click.
-  function makeFlow(block, before) {
+  // ---------- activity flow: what the agent is doing, in Dia's compact style ----------
+  // By default you only see ONE small pill for the step that is running right now ("Reading 1 attachment", "Searching the
+  // web" with the favicons of the pages it opens, or three dots while it thinks). A finished step settles into a muted
+  // line ("Read 1 attachment"). Click the pill or the line to maximise the whole process (every step, every page it
+  // opened, how long it took); click again to minimise it.
+  function makeFlow(block, before, atEnd) {
     const t0 = Date.now();
     const root = h("div", { className: "dia-flow dia-live", hidden: true });
-    const sum = h("span", { className: "dia-flow-sum" });
-    const head = h("button", { className: "dia-flow-head", type: "button" }, sum, icon("chev"));
+    const sumIco = h("span", { className: "dia-sum-ico" });
+    const sumText = h("span", { className: "dia-flow-sumtext" });
+    const chev = icon("chev");
+    chev.setAttribute("class", "dia-svg dia-chev");
+    const sum = h("button", { className: "dia-flow-sum", type: "button", hidden: true }, sumIco, sumText, chev);
     const list = h("div", { className: "dia-flow-list" });
-    root.append(head, h("div", { className: "dia-flow-body" }, list));
-    if (before && before.parentNode === block) block.insertBefore(root, before); else block.prepend(root);
-    head.setAttribute("aria-expanded", "false");
-    head.addEventListener("click", () => head.setAttribute("aria-expanded", String(root.classList.toggle("dia-open"))));
+    const pill = h("button", { className: "dia-flow-pill", type: "button", hidden: true });
+    const pillTime = h("span", { className: "dia-pill-time" });
+    root.append(sum, h("div", { className: "dia-flow-body" }, list), pill);
+    if (atEnd) block.append(root);
+    else if (before && before.parentNode === block) block.insertBefore(root, before);
+    else block.prepend(root);
+    const toggle = () => {
+      const open = root.classList.toggle("dia-open");
+      sum.setAttribute("aria-expanded", String(open));
+      pill.setAttribute("aria-expanded", String(open));
+      repaint();
+    };
+    sum.addEventListener("click", toggle);
+    pill.addEventListener("click", toggle);
     const steps = [];
-    let active = null, timer = null, ended = false, mode = "done", total = 0;
+    let active = null, timer = null, ended = false, mode = "done", total = 0, pillKey = "", sumKey = "";
     const fmt = (ms) => (ms < 9950 ? (ms / 1000).toFixed(1) : Math.round(ms / 1000)) + "s";
-    // after a few seconds the live step shows how long it has been going, so a slow model never looks hung
-    const tick = () => { if (active?.state === "active") { const ms = Date.now() - active.start; active.time.textContent = ms >= 3000 ? fmt(ms) : ""; } };
+    // after a few seconds the running step shows how long it has been going, so a slow model never looks hung
+    const tick = () => {
+      if (active?.state !== "active") return;
+      const ms = Date.now() - active.start;
+      active.time.textContent = ms >= 3000 ? fmt(ms) : "";
+      pillTime.textContent = ms >= 4000 ? fmt(ms) : "";
+    };
+    const paintPill = () => {
+      const s = active;
+      if (!s || s.state !== "active") { pill.hidden = true; pillKey = ""; pillTime.textContent = ""; return; }
+      pill.hidden = false;
+      const dots = s.quiet || s.dots;
+      const favs = s.favs.slice(0, 3);
+      const key = dots ? "dots" : (s.pillText || s.label) + "|" + favs.join("|") + "|" + (s.ico || "");
+      if (key === pillKey) return;
+      pillKey = key;
+      pill.classList.remove("dia-pill-pop"); void pill.offsetWidth; pill.classList.add("dia-pill-pop");
+      if (dots) pill.replaceChildren(h("span", { className: "dia-dots" }, h("i"), h("i"), h("i")), pillTime);
+      else pill.replaceChildren(
+        favs.length ? h("span", { className: "dia-favs" }, ...favs.map((u) => h("img", { src: u, onerror: (e) => e.target.remove() })))
+          : h("span", { className: "dia-pill-ico" }, icon(s.ico || "search")),
+        h("span", { className: "dia-pill-text", textContent: s.pillText || s.label }), pillTime);
+    };
+    // the muted line: what has been done so far
+    const refresh = () => {
+      const done = steps.filter((s) => !s.quiet && s.state !== "dropped" && s.state !== "active" && s.kind !== "links" && s.kind !== "plan");
+      const open = root.classList.contains("dia-open");
+      if (!done.length && !open) sum.hidden = true;
+      else if (!done.length) { // opened while the first step is still running: keep a line to click to minimise it again
+        sum.hidden = false;
+        sumText.textContent = "Hide steps";
+        if (sumKey !== "hide") { sumKey = "hide"; sumIco.replaceChildren(icon("spark")); }
+      } else {
+        sum.hidden = false;
+        const parts = done.map((s) => s.doneLabel || s.label);
+        const lead = parts.length > 2 ? `${parts[0]} · ${parts[1]} · +${parts.length - 2}` : parts.join(" · ");
+        sumText.textContent = (mode === "stopped" ? "Stopped · " : "") + lead + (ended && total >= 3000 ? " · " + fmt(total) : "");
+        const ico = done[0].ico || "check";
+        if (ico !== sumKey) { sumKey = ico; sumIco.replaceChildren(icon(ico)); }
+      }
+      root.hidden = !open && sum.hidden && pill.hidden && !steps.some((s) => s.state !== "dropped" && s.state !== "active" && !s.quiet && s.kind !== "plan");
+    };
+    const repaint = () => { paintPill(); refresh(); };
     function mk(label, o) {
       const ico = h("span", { className: "dia-step-ico" }, h("i", { className: "dia-spin" }));
       const text = h("span", { className: "dia-step-text", textContent: label });
@@ -2327,12 +2444,16 @@
       const chips = h("div", { className: "dia-step-chips" });
       const el = h("div", { className: "dia-step dia-active" }, ico, h("div", { className: "dia-step-main" }, h("div", { className: "dia-step-label" }, text, time), chips));
       const s = {
-        el, time, label, kind: o.kind || "", quiet: !!o.quiet, doneText: o.done || "", doneLabel: "", state: "active", start: Date.now(),
-        set(t) { s.label = t; text.textContent = t; return s; },
+        el, time, label, kind: o.kind || "", ico: o.ico || "", pillText: o.pill || "", dots: !!o.dots, favs: [],
+        quiet: !!o.quiet, doneText: o.done || "", doneLabel: "", state: "active", start: Date.now(),
+        set(t) { s.label = t; text.textContent = t; if (active === s) paintPill(); return s; },
         chip(d) {
+          const src = d.icon || "page-icon:" + d.url;
           const c = h("span", { className: "dia-chipsrc", title: d.url || d.label },
-            h("img", { src: d.icon || "page-icon:" + d.url, onerror: (e) => e.target.remove() }), h("span", { textContent: d.label }), h("i"));
+            h("img", { src, onerror: (e) => e.target.remove() }), h("span", { textContent: d.label }), h("i"));
           chips.append(c);
+          s.favs.push(src);
+          if (active === s) paintPill();
           return { done() { c.classList.add("dia-ok"); }, fail() { c.classList.add("dia-bad"); } };
         },
         finish(state, glyph, t) {
@@ -2344,25 +2465,16 @@
           if (t || s.doneText) s.set(t || s.doneText);
           s.doneLabel = s.label;
           time.textContent = "";
+          repaint();
           return s;
         },
         done(t) { return s.finish("done", "check", t); },
         fail(t) { return s.finish("fail", "close", t); },
         halt() { return s.finish("stopped", "close"); },
-        drop() { if (s.state === "dropped") return s; s.state = "dropped"; el.remove(); return s; },
+        drop() { if (s.state === "dropped") return s; s.state = "dropped"; el.remove(); repaint(); return s; },
       };
       return s;
     }
-    const refresh = () => {
-      const shown = steps.filter((s) => !s.quiet && s.state !== "dropped");
-      if (!ended) { root.hidden = !steps.some((s) => s.state !== "dropped"); return; }
-      if (!shown.length) { root.hidden = true; return; }
-      root.hidden = false;
-      const main = shown.filter((s) => s.kind !== "links" && s.kind !== "plan"); // bookkeeping steps stay in the list, not the summary
-      const parts = (main.length ? main : shown).map((s) => s.doneLabel || s.label);
-      const lead = parts.length > 2 ? `${parts[0]} · ${parts[1]} · +${parts.length - 2}` : parts.join(" · ");
-      sum.textContent = (mode === "stopped" ? "Stopped · " : "") + lead + (total >= 1500 ? " · " + fmt(total) : "");
-    };
     const api = {
       root,
       get active() { return active; },
@@ -2374,13 +2486,14 @@
         const s = mk(label, o);
         steps.push(s); active = s; list.append(s.el);
         clearInterval(timer); timer = setInterval(tick, 1000);
-        refresh();
+        pillTime.textContent = "";
+        repaint();
         return s;
       },
-      // "Thinking": the step shown whenever nothing else is running, so there is always something alive on screen
-      wait(label = "Thinking") { if (!active || active.state !== "active") api.begin(label, { quiet: true }); },
-      dropQuiet() { if (active?.quiet) { active.drop(); active = null; } },
-      note(label, o = {}) { const s = mk(label, o); s.done(); steps.push(s); list.append(s.el); refresh(); return s; },
+      // the three dots: shown whenever nothing else is running, so something is always alive on screen
+      wait() { if (!active || active.state !== "active") api.begin("Thinking", { quiet: true }); },
+      dropQuiet() { if (active?.quiet) { active.drop(); active = null; repaint(); } },
+      note(label, o = {}) { const s = mk(label, o); s.done(); steps.push(s); list.append(s.el); repaint(); return s; },
       end(how = "done") {
         if (ended) return;
         ended = true; mode = how;
@@ -2388,7 +2501,7 @@
         if (active) { if (active.quiet) active.drop(); else if (how === "done") active.done(); else if (how === "failed") active.fail(); else active.halt(); active = null; }
         total = Date.now() - t0;
         root.classList.remove("dia-live");
-        refresh();
+        repaint();
       },
     };
     return api;
@@ -2665,14 +2778,14 @@
       el.classList.add("dia-page-toggle");
       el.classList.toggle("dia-off", !usePage);
       const toggle = () => { if (!started) { usePage = !usePage; renderPills(); } };
-      const switchEl = h("button", {
-        className: "dia-page-switch", type: "button", textContent: usePage ? "Included" : "Skipped",
-        title: usePage ? "Leave this page out of the first message" : "Include this page in the first message",
+      const minBtn = h("button", {
+        className: "dia-page-min", type: "button",
+        title: usePage ? "Minimise: leave this page out of the first message" : "Add this page back to the first message",
         onclick: (e) => { e.stopPropagation(); toggle(); },
-      });
-      switchEl.setAttribute("aria-label", usePage ? "Page context included. Click to skip it." : "Page context skipped. Click to include it.");
-      switchEl.setAttribute("aria-pressed", String(usePage));
-      el.append(switchEl);
+      }, icon(usePage ? "minus" : "plus"));
+      minBtn.setAttribute("aria-label", usePage ? "Page included. Click to leave it out." : "Page left out. Click to include it.");
+      minBtn.setAttribute("aria-pressed", String(!usePage));
+      el.append(minBtn);
       return el;
     }
     function renderPills() {
@@ -3131,7 +3244,7 @@
     const toolItems = (q) => {
       const out = [];
       if (!q || "tabs".startsWith(q) || "manage".startsWith(q)) out.push({ label: "@Tabs", ico: "folder", sub: "Manage open tabs", run: () => { manage = true; renderPills(); } });
-      if (!q || "web".startsWith(q) || "search".startsWith(q)) out.push({ label: "@Web", ico: "globe", sub: "Force a web search", run: () => { setWeb(true); } });
+      if (!q || "web".startsWith(q) || "search".startsWith(q)) out.push({ label: "@Web", ico: "globe", sub: "Let it search the internet", run: () => { setWeb(true); } });
       return out;
     };
     function slashMenu(start, q) {
@@ -3191,12 +3304,12 @@
       if (!webBtnEl) return;
       webBtnEl.classList.toggle("on", webOn);
       webBtnEl.setAttribute("aria-pressed", String(webOn));
-      webBtnEl.title = webOn ? "Web search is on for this chat. Click to turn it off." : "Force web search for this chat (works with AFM).";
+      webBtnEl.title = webOn ? "The internet is on for this chat. Click to turn it off." : "Let the assistant search the internet. Without it, it only uses links on the page you're on.";
     }
     function setWeb(on) {
       webOn = !!on;
       updateWebBtn();
-      if (webOn) flashNote("Web search is on for this chat.");
+      if (webOn) flashNote("Web search is on for this chat."); else flashNote("Web search is off: it will only use links on this page.");
     }
     function pickSkill(s) { skill = s; renderPills(); focusInput(); }
 
@@ -3217,7 +3330,7 @@
     // the text a user turn carries: the request, @format hints, attached tabs/files/selections, tab list
     function userText(m, withTabs) {
       const apple = provider() === "apple";
-      let t = m.content;
+      let t = apple && (m.fromSkill || m.content === DEFAULT_PROMPT || m.content === pref("prompt", DEFAULT_PROMPT)) ? chatty(m.content) : m.content;
       const fm = (m.formats || []).map((id) => FORMATS.find((f) => f.id === id)?.prompt).filter(Boolean);
       if (fm.length) t += "\n\n" + fm.join(" ");
       for (const r of m.refs || []) {
@@ -3231,12 +3344,15 @@
     }
     // Every request is rebuilt from scratch. Cloud/large models get the page in the system prompt plus
     // real multi-turn history. Apple's tiny on-device model ignores history, so it gets one flattened turn.
-    function buildRequest(resuming, webCtx, deep) {
+    function buildRequest(resuming, webCtx, deep, lead) {
       const lastU = [...convo].reverse().find((m) => m.role === "user");
       const firstU = convo.find((m) => m.role === "user");
       const firstTurn = lastU === firstU;
       const includePage = !!(page && !page.none && (firstTurn ? lastU?.pageContext !== false : !pageRefPromoted));
       const req = lastU?.content || pref("prompt", DEFAULT_PROMPT);
+      const noWebNote = "\n\nYou cannot search or browse the internet in this chat. Work only from the page, what the user attached, and the page's own links listed above (if any). If the answer isn't there, say so plainly and mention that they can press the globe button to let you search the web. Never claim to have looked anything up online.";
+      // when a sentence was already said before researching, the answer carries on from it
+      const leadNote = lead ? `\n\nYou have already started this reply by telling the user: “${lead}” Carry straight on from there with what you found. Don't repeat that sentence or greet them again.` : "";
       let ctx = includePage ? pageCtx() : "";
       // On YouTube every transcript line is prefixed with its [mm:ss] stamp (so "Key moments" can cite
       // times). For anything not about timing, strip them so the model doesn't echo them.
@@ -3260,9 +3376,9 @@
         const webContext = webCtx ? fit(webCtx.text, 2600) : "";
         const ask = resuming ? "Continue your previous answer exactly where it stopped, without repeating it." : userText(lastU || { content: req }, true);
         return {
-          system: systemPrompt(), pageBlock: "", web: false,
+          system: systemPrompt() + leadNote + (lastU?.web ? "" : noWebNote), pageBlock: "", web: false,
           messages: [{ role: "user", content:
-            (pageContext ? (includePage ? "Use the web page below to respond to the user's request." + (effort() <= 2 ? " Be concise." : "") + "\n\n" : "") + pageContext + "\n\n" : "") +
+            (pageContext ? (includePage ? "Use the web page below to respond to the user's request." + (effort() <= 1 ? " Be concise." : "") + "\n\n" : "") + pageContext + "\n\n" : "") +
             (webContext ? webContext + "\n\n" : "") +
             (transcript ? `=== CONVERSATION SO FAR ===\n${transcript}\n\n` : "") + `=== REQUEST ===\n${ask}` }],
         };
@@ -3272,11 +3388,10 @@
         : { role: "user", content: apiContent(userText(m, m === lastU), (m.refs || []).filter(sendsRaw)) });
       while (msgs[0]?.role === "assistant") msgs.shift();
       if (resuming) msgs.push({ role: "user", content: "Continue exactly where you stopped. Do not repeat what you already wrote." });
-      const heur = webMode() === "auto" && !lastU?.fromSkill && needsWeb(lastU?.label || lastU?.content || "");
       const linkSearch = WANTS_PAGE_LINKS.test(lastU?.label || lastU?.content || "");
-      const forced = !!lastU?.web || heur || linkSearch;
-      const nativeWeb = isNative() && !searchBroken.has(provider()) && (forced || webMode() === "auto") && !linkSearch; // page-link requests use the captured page links directly
-      return { system: systemPrompt(), pageBlock: [pageBlock, webCtx?.text].filter(Boolean).join("\n\n"), messages: msgs, web: nativeWeb, forceWeb: forced };
+      const forced = !!lastU?.web; // the globe: the only thing that lets a request reach the internet
+      const nativeWeb = isNative() && !searchBroken.has(provider()) && forced && !linkSearch; // page-link requests use the captured page links directly
+      return { system: systemPrompt() + leadNote + (forced ? "" : noWebNote), pageBlock: [pageBlock, webCtx?.text].filter(Boolean).join("\n\n"), messages: msgs, web: nativeWeb, forceWeb: forced };
     }
 
     // ----- messages in the log -----
@@ -3450,10 +3565,16 @@
       block.classList.remove("dia-pending");
       block.querySelector(".dia-actions")?.remove();
       block.querySelector(".dia-sources")?.remove();
-      if (opts.resume) { block.querySelector(".dia-flow")?.remove(); block._flow = null; }
+      if (opts.resume) { // a continued answer is shown as one piece again
+        block.querySelectorAll(".dia-flow").forEach((n) => n.remove());
+        [...block.querySelectorAll(".dia-answer")].slice(1).forEach((n) => n.remove());
+        block._flow = null;
+      }
       let answerEl = block.querySelector(".dia-answer");
       if (!answerEl) { answerEl = h("div", { className: "dia-answer" }); block.append(answerEl); }
-      const flow = block._flow || (block._flow = makeFlow(block, answerEl));
+      answerEl.classList.remove("dia-seg-done");
+      let flow = block._flow || (block._flow = makeFlow(block, answerEl));
+      let segStart = 0, lead = ""; // the text so far is split into pieces around each research pill; `lead` is the sentence said before researching
       flow.wait(); // from the first moment something is alive on screen
       if (!block.isConnected) logEl.append(block);
       renderQueue();
@@ -3495,7 +3616,7 @@
         if (end <= shown) return;
         settle();
         const stick = nearBottom();
-        renderMd(answerEl, view(acc.slice(0, end)), seek, view(acc.slice(0, shown)).length, cites);
+        renderMd(answerEl, view(acc.slice(segStart, end)), seek, view(acc.slice(segStart, shown)).length, cites);
         shown = end;
         lastPaint = Date.now();
         if (stick) scrollDown(false);
@@ -3523,6 +3644,35 @@
         if (e > 0) paint(e);
       };
       const schedule = () => { if (!paintTimer) paintTimer = setTimeout(flush, Math.max(0, 110 - (Date.now() - lastPaint))); };
+      // The assistant has said something and is about to look further (a search, a link): park the text where it is, give
+      // the research its own pill below it, and let the rest of the answer continue underneath, like a chat would.
+      const newPhase = () => {
+        clearTimeout(paintTimer); paintTimer = null;
+        if (acc.length > shown) paint();
+        if (!answerStarted) return; // nothing said yet: the pill simply goes at the top
+        const seg = view(clean(acc.slice(segStart)));
+        renderMd(answerEl, seg, seek, Infinity, cites);
+        answerEl.classList.add("dia-seg-done");
+        acc = acc.slice(0, segStart) + seg + "\n\n";
+        segStart = shown = acc.length;
+        flow = makeFlow(block, null, true);
+        block._flow = flow;
+        answerEl = h("div", { className: "dia-answer" });
+        block.append(answerEl);
+        answerStarted = false;
+      };
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      // a sentence that is already known is revealed a couple of words at a time, as if it were being typed
+      const typeOut = async (text) => {
+        const words = text.match(/\S+\s*/g) || [text];
+        for (let i = 0; i < words.length; i += 2) {
+          if (signal.aborted) throw Object.assign(new Error("Aborted"), { name: "AbortError" });
+          acc += words.slice(i, i + 2).join("");
+          schedule();
+          await sleep(55);
+        }
+        await sleep(160);
+      };
       const finalRender = (text) => {
         const { text: body, actions } = extractActions(text);
         renderMd(answerEl, body, seek, Infinity, cites); // final solid pass, no fade boundary
@@ -3538,40 +3688,59 @@
           answerEl.append(h("div", { className: "dia-note", textContent: "Offline summary. This model needs an API key: open the model menu at the top of the sidebar and edit it." }));
         } else {
           const lastU = [...convo].reverse().find((m) => m.role === "user");
-          const heur = webMode() === "auto" && !lastU?.fromSkill && needsWeb(lastU?.label || lastU?.content || "");
           // Search from the browser (for models without a built-in tool, or when that tool was rejected):
           // the model writes a query, we search, read the top pages and hand them back as numbered sources.
           // questions that are plainly about the page itself never need a search, so skip the extra routing call
           const askText = lastU?.label || lastU?.content || "";
-          const intent = linkIntent(askText);
-          const linkSearch = intent.wants;
-          const skipRouter = !linkSearch && !lastU?.web && !heur && (askText.trim().length < 6 || ABOUT_PAGE.test(askText));
+          const canWeb = !!lastU?.web; // the globe is on for this message
           const firstU = convo.find((m) => m.role === "user");
           const searchPage = (lastU === firstU && lastU?.pageContext === false) ? null : page;
+          const sameUrl = (a, b) => a.replace(/[#?].*$/, "").replace(/\/$/, "").toLowerCase() === b.replace(/[#?].*$/, "").replace(/\/$/, "").toLowerCase();
+          const rawIntent = linkIntent(askText);
+          // without the globe, only links that are on the page that is already loaded may be opened
+          const offPage = canWeb ? [] : rawIntent.urls.filter((u) => !(searchPage?.links || []).some((l) => sameUrl(l.url, u)));
+          const intent = canWeb ? rawIntent : { ...rawIntent, urls: rawIntent.urls.filter((u) => !offPage.includes(u)) };
+          intent.wants = !!(intent.textWants || intent.urls.length);
+          if (offPage.length) block.insertBefore(h("div", { className: "dia-note", textContent: "That address isn't a link on this page, so I haven't opened it. Press the globe if you'd like me to go online." }), answerEl);
+          const linkSearch = intent.wants;
+          const skipRouter = !linkSearch && !canWeb && (askText.trim().length < 6 || ABOUT_PAGE.test(askText));
           const runFallback = async () => {
             if (skipRouter) return;
             const apple = provider() === "apple";
             const cap = apple ? 1100 : 3500;
             const pageLinks = searchPage?.links || [];
             try {
-              let picks = [], query = "";
+              let picks = [], query = "", say = "";
               // 1) cheap local pass: explicit URLs, "the third source", a link named in the question, keyword overlap
               const local = pageLinks.length || intent.urls.length ? pickLinks(pageLinks, askText, intent, apple ? 3 : 4) : { picks: [], candidates: [], confident: false };
+              // no globe and nothing on the page to follow: nothing to do (no extra model call either)
+              if (!canWeb && !(intent.wants && local.picks.length && local.confident) && !local.candidates.length) {
+                if (intent.textWants) block.insertBefore(h("div", { className: "dia-note", textContent: "I couldn't find a matching link on this page. Press the globe to let me search the web." }), answerEl);
+                return;
+              }
               if (intent.wants && local.picks.length && local.confident) {
                 picks = local.picks;
                 const why = local.picks[0].why;
+                say = picks.length > 1 ? "Let me open those links and see what they say." : why === "url" ? "Let me open that page and see what it says." : "Let me open that link and see what it says.";
                 flow.note(why === "url" ? "Using the link you gave" : why === "ordinal" ? "Found the link you meant" : `Matched ${picks.length === 1 ? "a link" : picks.length + " links"} on this page`, { kind: "links" });
               } else {
                 // 2) the model chooses from a short candidate list (or decides to search the web, or to do nothing)
-                const step = flow.begin(local.candidates.length ? `Looking through ${pageLinks.length} links on this page` : intent.wants ? "Deciding what to open" : "Deciding whether to look anything up", { kind: "plan", done: "Chose what to look at" });
-                const route = await planSearch(convo, searchPage, !!lastU?.web || heur || intent.wants, signal, local.candidates);
+                const step = flow.begin(local.candidates.length ? `Looking through ${pageLinks.length} links on this page` : intent.wants ? "Deciding what to open" : "Deciding whether to look anything up", { kind: "plan", dots: true, done: "Chose what to look at" });
+                const route = await planSearch(convo, searchPage, canWeb || intent.wants, signal, local.candidates, canWeb);
+                say = route.say;
                 if (route.links.length) { picks = route.links; step.done(`Picked ${picks.length} link${picks.length > 1 ? "s" : ""}`); }
                 else if (intent.wants && local.picks.length) { picks = local.picks; step.done(`Picked ${picks.length} link${picks.length > 1 ? "s" : ""}`); }
-                else if (route.query && (webMode() !== "off" || lastU?.web)) { query = route.query; step.done("Decided to search the web"); } // never a web search when the user turned it off
+                else if (route.query && canWeb) { query = route.query; step.done("Decided to search the web"); } // only with the globe on
                 else step.drop();
               }
+              // like a chat: say what the page does (or doesn't) tell them, and that you're looking further, BEFORE going off to look
+              if (picks.length || query) {
+                lead = (say || (picks.length ? "Let me look into that link." : "Let me look that up.")).trim();
+                await typeOut(lead);
+                newPhase();
+              }
               if (picks.length) {
-                const step = flow.begin(picks.length === 1 ? `Opening ${hostOf(picks[0].url) || picks[0].title}` : `Opening ${picks.length} linked pages`, { kind: "read" });
+                const step = flow.begin(picks.length === 1 ? `Opening ${hostOf(picks[0].url) || picks[0].title}` : `Opening ${picks.length} linked pages`, { kind: "read", ico: "globe", pill: picks.length === 1 ? "Reading a link" : "Reading links" });
                 const chips = picks.map((l) => step.chip({ url: l.url, label: hostOf(l.url) || l.title }));
                 const results = await readLinkPages(picks, signal, { cap, query: askText, chips, step, notes: apple && effort() >= 2 });
                 const ok = results.filter((r) => !r.failed).length;
@@ -3581,10 +3750,10 @@
                 searchInfo = { query: "Links from " + from, sources: results.map((r) => ({ title: r.title, url: r.url })) };
                 cites = searchInfo.sources;
               } else if (query) {
-                const s1 = flow.begin(`Searching the web for “${query}”`, { kind: "search", done: `Searched for “${query}”` });
+                const s1 = flow.begin(`Searching the web for “${query}”`, { kind: "search", ico: "globe", pill: "Searching the web", done: `Searched for “${query}”` });
                 const results = await webSearch(query, signal);
                 s1.done();
-                const s2 = flow.begin("Reading the top results", { kind: "read" });
+                const s2 = flow.begin("Reading the top results", { kind: "read", ico: "globe", pill: "Searching the web" });
                 const chips = results.slice(0, 3).map((r) => s2.chip({ url: r.url, label: hostOf(r.url) || r.title }));
                 await readSources(results, signal, cap, query, chips);
                 s2.done(`Read ${results.slice(0, 3).filter((r) => r.text).length} results`);
@@ -3598,8 +3767,9 @@
               block.insertBefore(h("div", { className: "dia-note", textContent: "Couldn't search the web: " + e.message }), answerEl);
             }
           };
-          const wantsSearch = !prior && (lastU?.web || linkSearch || (webMode() === "auto" && !lastU?.fromSkill));
-          if (wantsSearch && (linkSearch || !isNative() || searchBroken.has(provider()))) await runFallback();
+          // the globe (web + links) or, without it, the links on the loaded page; the built-in search tool of Gemini/Claude only ever runs with the globe
+          const wantsSearch = !prior && (canWeb || linkSearch || (!lastU?.fromSkill && !!searchPage?.links?.length));
+          if (wantsSearch && (linkSearch || !isNative() || (canWeb && searchBroken.has(provider())))) await runFallback();
           // High effort on the small on-device model: read the whole page in parts, keep notes for this question
           let deep = null;
           if (provider() === "apple" && effort() >= 3 && !prior && lastU === firstU && lastU?.pageContext !== false && page && !page.none && page.text.length > chunkSize() * 1.3) {
@@ -3611,18 +3781,20 @@
           const setStatus = (t) => flow.begin(t, { kind: "refine", done: /^Draft/.test(t) ? "Drafted an answer" : "Refined the answer" });
           for (let attempt = 0; ; attempt++) {
             try {
-              let reqNow = buildRequest(!!prior, webCtx, deep);
+              let reqNow = buildRequest(!!prior, webCtx, deep, lead);
               if (provider() === "apple" && effort() >= 4 && !prior) { // Max: draft first, then stream the improved answer
                 reqNow = await refineRequest(reqNow, signal, setStatus);
                 if (flow.active?.state === "active") flow.active.done();
               }
-              if (reqNow.web && reqNow.forceWeb) flow.begin("Searching the web", { kind: "search", done: "Searched the web" });
+              if (reqNow.web && reqNow.forceWeb) flow.begin("Searching the web", { kind: "search", ico: "globe", done: "Searched the web" });
               else flow.wait();
               for await (const ev of streamLLM(reqNow, signal)) {
                 if (ev.t === "think") { onThink(ev.d); continue; }
                 if (ev.t === "status") {
+                  const isSearch = /search/i.test(ev.d);
+                  if (answerStarted && isSearch) newPhase(); // the model already said something, then went to search
                   if (answerStarted) flow.note(ev.d, { kind: "misc" });
-                  else flow.begin(ev.d, { kind: /search/i.test(ev.d) ? "search" : "misc", done: /^Searching the web/i.test(ev.d) ? "Searched the web" : "" });
+                  else flow.begin(ev.d, isSearch ? { kind: "search", ico: "globe", pill: "Searching the web", done: "Searched the web" } : { kind: "misc" });
                   continue;
                 }
                 if (ev.t === "query") {
@@ -3651,21 +3823,23 @@
               break;
             } catch (e) {
               // the built-in search tool was refused before any answer: remember it and search from the browser instead
-              if (e.webUnavailable && attempt === 0 && !acc && !prior && wantsSearch) { searchBroken.add(provider()); await runFallback(); continue; }
+              if (e.webUnavailable && attempt === 0 && !acc && !prior && canWeb) { searchBroken.add(provider()); await runFallback(); continue; }
               throw e;
             }
           }
           clearTimeout(paintTimer); paintTimer = null;
           endThink();
           paint();
-          acc = view(clean(acc));
-          finalRender(acc);
+          const lastSeg = view(clean(acc.slice(segStart)));
+          acc = acc.slice(0, segStart) + lastSeg;
+          finalRender(lastSeg);
+          if (segStart && !lastSeg.trim()) answerEl.remove();
         }
       } catch (e) {
         clearTimeout(paintTimer); paintTimer = null;
         endThink();
         if (e.name === "AbortError") {
-          if (stopped) { if (acc) { acc = view(acc); finalRender(acc); } }
+          if (stopped) { if (acc) { const seg = view(acc.slice(segStart)); acc = acc.slice(0, segStart) + seg; finalRender(seg); } }
           else if (my === gen) { failed = true; block.append(h("p", { className: "dia-error", textContent: "That took too long and was cancelled. Try again." })); }
         } else {
           failed = true;
@@ -3752,7 +3926,7 @@
       const block = h("div", { className: "dia-msg dia-ai dia-pending" });
       const flow = (block._flow = makeFlow(block, null));
       const video = !!ytId(url);
-      const rd = flow.begin(video ? "Fetching the video captions" : "Reading this page", { kind: "read", done: video ? "Read the captions" : "Read the page" });
+      const rd = flow.begin(video ? "Fetching the video captions" : "Reading 1 attachment", { kind: "read", ico: video ? "play" : "clip", done: video ? "Read the captions" : "Read 1 attachment" });
       const pd0 = pageData();
       const chip = rd.chip({ url, label: (pd0?.label || hostOf(url) || "this page").slice(0, 40), icon: pd0?.image });
       logEl.append(block);
@@ -4266,13 +4440,9 @@
           nav(btn("Back", () => pickStep()), btn("Use Apple Intelligence", () => { setPref("activemodel", "apple"); refreshModel(); prefsStep(); }, true)));
       };
       prefsStep = () => {
-        const seg = h("div", { className: "dia-seg" });
-        const paint = () => seg.replaceChildren(...[["auto", "Automatic"], ["manual", "Only when I ask"], ["off", "Off"]].map(([v, l]) =>
-          h("button", { className: "dia-chip" + (webMode() === v ? " on" : ""), textContent: l, onclick: () => { setPref("search", v); paint(); } })));
-        paint();
         body.replaceChildren(dots(2), hero("How should it work?"), effortControl(),
-          h("div", { className: "dia-eff-top" }, h("span", { textContent: "Web search" })), seg,
-          h("div", { className: "dia-note", textContent: "Automatic searches the web when a question needs fresh information." }),
+          h("div", { className: "dia-eff-top" }, h("span", { textContent: "Web search" })),
+          h("div", { className: "dia-note", textContent: "It never goes online on its own. Press the globe button when you want it to search the internet. Until then it only uses the page you're on and the links on that page." }),
           nav(btn("Back", () => pickStep()), btn("Finish", () => doneStep(), true)));
       };
       doneStep = () => body.replaceChildren(dots(3), hero("You're all set"),
@@ -4359,7 +4529,7 @@
       sendBtn = h("button", { className: "dia-send", onclick: () => (busy && !hasContent() ? stop() : submit()) });
       sendBtn.addEventListener("mousedown", (e) => e.preventDefault()); // keep typing focus in the box after sending
       const addBtn = h("button", { className: "dia-icon dia-add", title: "Attach files, add tabs, Skills", onclick: (e) => { e.stopPropagation(); plusMenu(); } }, icon("plus"));
-      webBtnEl = h("button", { className: "dia-icon dia-webbtn", title: "Force web search for this chat (works with AFM).", onclick: () => setWeb(!webOn) }, icon("globe"));
+      webBtnEl = h("button", { className: "dia-icon dia-webbtn", title: "Let the assistant search the internet. Without it, it only uses links on the page you're on.", onclick: () => setWeb(!webOn) }, icon("globe"));
       webBtnEl.setAttribute("aria-label", "Toggle web search");
       webBtnEl.setAttribute("aria-pressed", "false");
       const tabsBtn = h("button", { className: "dia-icon dia-tabsbtn", title: "Add tabs and page links as context", onclick: (e) => { e.stopPropagation(); if (picker) closePicker(); else openPicker("tabs"); } }, icon("tabs"));

@@ -7,24 +7,37 @@ macOS) and only hides when a page itself goes fullscreen, such as a video.
 
 It looks like Dia's sidebar: a bare header (new chat and the **model picker** on the left, a menu and close on the right), a
 blank empty chat, and one big rounded composer with your context cards, the box, and a bottom row with **+**, a **tabs**
-button, a **globe** to force web search, a **camera** and a round send button. It uses your Zen space's own colours, so it
-follows each space and Zen's light/dark setting.
+button, a **globe** to force web search, a **camera** and a round send button. It has no paint of its own: like Zen's tab sidebar it is
+transparent over your space's background, so it is exactly the colour of the space (gradient and all) and follows each space
+and Zen's light/dark setting. (The *Neutral* colour option, and the floating fallback that overlays a page, use a solid panel.)
 
 ## What it is doing, always on screen
 
-Whenever the model is working, you can see what it is doing:
+Whenever the model is working there is always something alive in the chat, in the same compact style as Dia:
 
+- **One small pill for what it is doing right now**: *Reading 1 attachment*, *Searching the web* (with the favicons of the
+  pages it opens stacked on the left), *Reading links*, or three blue dots while it thinks. The running text has a light sweep
+  across it, and after a few seconds the pill shows how long it has been going, so a slow on-device model never looks frozen.
+- **A finished step settles into a muted line** ("Read 1 attachment", "Searched the web · 7.1s").
+- **Minimised by default, maximise on demand.** Click the pill or the muted line to open the full list of steps (every page
+  it opened, with ✓ / ✗ per page, and the timings). Click again to minimise it.
 - A thin light sweeps under the header and the send button wears a spinning ring while anything is running.
-- Above the answer, a live list shows each step as it happens: **Reading this page**, **Looking through 48 links on this
-  page**, **Opening 3 linked pages** (one favicon chip per page, turning ✓ or ✗ as each one loads), **Searching the web for
-  "…"**, **Drafting an answer**, **Thinking**. The running step has a spinner and a light sweep across its text; after a few
-  seconds it also shows how long it has been going, so a slow on-device model never looks frozen.
-- When the answer starts, the steps fold into a one-line summary ("Read the page · Read 3 linked pages · 4.2s") that you can
-  open again with a click.
-- The answer fades in a few words at a time instead of in blocks, and never shows half-finished `**bold**`, `code` or links.
+- The answer fades in a few words at a time and never shows half-finished `**bold**`, `code` or links.
 - A tab or link you just added shows a card with a spinner and a "Reading…" line until its text is in.
 
 With *Reduce motion* on, the sweeps and spinners stay still.
+
+## How it answers
+
+Like a chat, not a report:
+
+- **It answers as it goes.** When a question needs more than the page (a link on it, or, with the globe on, the web), it first says what the page does or doesn't tell you
+  and that it is looking further (*"This page doesn't list a phone number, so I'm checking whether The Gym Group has one."*),
+  then shows the research pill, then carries on with the rest of the answer underneath.
+- **Apple Intelligence talks like a normal chatbot**: friendly, flowing paragraphs, no bullet lists, headings or tables unless
+  you ask for a list, steps or a table (or use `@list` / `@steps`). The built-in *Summarize* and *Key takeaways* prompts ask for
+  a friendly summary instead of bullets. The Effort slider sets how much it says (see below).
+- Other models keep their concise, structured style.
 
 ## Opening it
 
@@ -37,7 +50,7 @@ back when the tab is on a page again. Each tab keeps its own chat while the side
 
 ## Setup guide
 
-The first time you open the sidebar, a short guide helps you pick a model, set the effort and choose how web search works.
+The first time you open the sidebar, a short guide helps you pick a model and set the effort.
 After you save a model, setup lets you continue or optionally add another; adding more models is never required.
 To see it again, tick **Setup → Run the setup guide again** in the mod's Sine settings. **That removes any models you added**
 (Apple Intelligence stays) and shows the guide the next time the sidebar is open. If a page is already open, it shows at once.
@@ -74,7 +87,8 @@ what that means depends on the model:
 | | Low | Medium | High | Max |
 |---|---|---|---|---|
 | **Answer style** | brief | balanced | thorough | thorough, checked against the sources |
-| **Apple Intelligence** | one quick pass | one pass, takes notes on linked pages | reads the **whole page in parts**, keeps notes for your question, then answers | also drafts an answer and **refines** it |
+| **Apple Intelligence: what you read** | a sentence or two | one or two short, natural paragraphs | a full, detailed answer in several paragraphs: the key points, why they matter, context and an example, with no bullet lists | the same, checked against the page and sources, and says what the page doesn't cover |
+| **Apple Intelligence: how it works** | one quick pass | one pass, takes notes on linked pages | reads the **whole page in parts**, keeps notes for your question, then answers | also drafts an answer and **refines** it |
 | **Gemini** | light thinking | light thinking | more thinking | longest thinking |
 | **Reasoning models** | `reasoning_effort` low | medium | high | high |
 
@@ -94,6 +108,7 @@ are ignored, and listing pages (search results, forums, link roundups) work as w
 - **Say what you mean.** "What does the second source say?", "open the last reference", "read link 3", "summarize the
   sources", "check the arxiv paper", or paste a URL. Explicit URLs and "the third link" are resolved directly; names and
   keywords are matched locally.
+- **Only links that are on the page.** Without the globe, these are the only things it can open.
 - **The small model only chooses between a short list.** Apple Intelligence is shown up to 12 locally ranked candidates with
   a bit of context, never the whole page's links, and picks up to three. If it picks none, the best local matches are used.
 - **Only what matters is kept.** Each opened page is cut down to the passages that answer your question (not just its first
@@ -129,32 +144,34 @@ You can also drop onto the sidebar (a "Drop to add as context" overlay appears):
   Paste images straight into the box too.
 - **Selected text**: select text on the page and it appears as a Selection card, or right-click → *Ask Chat about selection*.
 
-The current page starts as a context card above the chat box with an **Included / Skipped** control. It is greyed out when
-skipped from the first message. After that first message, it becomes a normal removable tab card for later messages. The
+The current page starts as a context card above the chat box. Hover it and a small round **minimise (−)** button appears on its
+corner, where other cards have an ✕: minimising leaves the page out of the first message (the card greys out and the button
+becomes **+** to put it back). After that first message, it becomes a normal removable tab card (with the ✕) for later messages. The
 **camera** attaches a screenshot as a *Capture* card (only models marked *Can read images* look at it). Up to 12 cards at a time.
 
-## Web search
+## Web search: only with the globe
 
-**Automatic by default.** When a question needs current or outside information, the model searches the web by itself:
+**The assistant never goes online on its own.** The internet is only searched when the **globe** button is on (or you use
+**@Web**). The globe stays on for the chat until you turn it off, and it resets when you start a new chat.
 
-- **Gemini** uses Google Search directly.
-- **Other models** (including Apple Intelligence) make one quick call to decide whether and what to search, then the mod
-  searches with DuckDuckGo by default, reads up to three pages (the passages that match your question) and answers with
-  clickable **[1] [2]** citations. Click the globe to force a search for this chat; it also works with Apple Intelligence
-  through AFM Server. In Settings, you can choose Google Search, Brave Search or a SearXNG instance. Available providers
-  are tried as fallbacks if the selected one is unavailable or rate-limited. Questions that are plainly about the page
-  ("summarize this page") skip that extra call.
+- **Globe off (the default):** it works only from the page you are on, anything you attached, and **the links on that
+  already-loaded page**. It can open those links to read them (see *Links on the page*), but nothing else. If you paste an
+  address that isn't a link on the page, it says so instead of opening it. If the answer isn't available, it says that
+  plainly and tells you to press the globe.
+- **Globe on:**
+  - **Gemini** uses Google Search directly, and **Claude** uses its built-in web search.
+  - **Other models** (including Apple Intelligence) make one quick call to decide what to search, then the mod searches with
+    DuckDuckGo by default, reads up to three pages (the passages that match your question) and answers with clickable
+    **[1] [2]** citations. Works with Apple Intelligence through AFM Server. In Settings you can choose Google Search, Brave
+    Search or a SearXNG instance; available providers are tried as fallbacks if the selected one is unavailable or rate-limited.
 
 Google Search reads the browser's Google results page, spaces requests out, and can use the existing browser session when
 available. Google may still show a CAPTCHA or rate-limit the request; the mod then tries another configured provider. This is
 page scraping, not Google-account authentication or a Google Search API. Google's Custom Search JSON API is closed to new
 customers and is scheduled to end for existing customers on January 1, 2027.
 
-Brave Search needs an API key and SearXNG needs an instance address. Google Search and DuckDuckGo need no extra setup.
-
-Change automatic search in **Settings → Chat → Web search** (Automatic / Only when I ask / Off), or in the setup guide. The
-globe or **@Web** forces a search even when automatic search is Off. With search Off, link following still works when you ask
-for it, but the model never searches the web on its own. Fetched page text is not saved to history.
+Brave Search needs an API key and SearXNG needs an instance address. Google Search and DuckDuckGo need no extra setup. Fetched
+page text is not saved to history.
 
 Gemini API limits are set by Google per project and model. The sidebar retries temporary 429s and, when using the automatic
 Flash choice, tries another offered Flash model and then Flash-Lite. If the project quota is zero or exhausted, open
@@ -178,16 +195,16 @@ Flash choice, tries another offered Flash model and then Flash-Lite. If the proj
 
 Short on purpose; model and effort live in the sidebar.
 
-- **Chat**: web search mode, automatic summaries, Enter-to-send.
+- **Chat**: automatic summaries, Enter-to-send, and which search provider the globe uses.
 - **Context**: attach the current page, attach selected text.
 - **Appearance**: match your Zen space or neutral colours, text size, URL bar button.
 - **Privacy**: save chat history.
 - **Setup**: run the setup guide again.
 - **Advanced** (tick *Show advanced options*): AFM Server address and key.
 
-Settings from earlier versions that no longer exist (answer length, sidebar side, YouTube timestamps, the old web search
-setting) are ignored: answer length is now the Effort slider, the side follows your tab sidebar, and web search is now
-automatic unless you change the new setting.
+Settings from earlier versions that no longer exist (answer length, sidebar side, YouTube timestamps, the Automatic / Only when
+I ask / Off web search setting) are ignored: answer length is now the Effort slider, the side follows your tab sidebar, and web
+search is simply controlled by the globe.
 
 ## Not included
 
@@ -215,7 +232,7 @@ its original name and restart.
 
 1. The sidebar only opens on a web page. On a new tab the URL bar icon is dimmed on purpose. Open a site first.
 2. Hover the URL bar: the chat icon appears on hover. No icon at all means the script isn't running: check the two Sine steps above.
-3. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see `[dia-sidebar] loaded v2.4.0`. A
+3. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see `[dia-sidebar] loaded v2.6.0`. A
    wrong script filename shows up as `[Sine]: Failed to load script`. If clicking the icon does nothing on a page, look for
    `[dia-sidebar] couldn't open the sidebar` and the error under it.
 
