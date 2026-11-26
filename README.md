@@ -164,6 +164,11 @@ becomes **+** to put it back). After that first message, it becomes a normal rem
     DuckDuckGo by default, reads up to three pages (the passages that match your question) and answers with clickable
     **[1] [2]** citations. Works with Apple Intelligence through AFM Server. In Settings you can choose Google Search, Brave
     Search or a SearXNG instance; available providers are tried as fallbacks if the selected one is unavailable or rate-limited.
+  - **Better queries (v2.7):** the model is told to write a specific query (real names instead of "it", version numbers, the year
+    for "latest", the exact fact wanted, no filler) using the page title and recent chat. The query is tidied, and if the results
+    don't match the question a second wording is tried. Results are merged, re-ranked by relevance (max two per site) and any
+    page that can't be opened is replaced by the next result. Gemini and Claude get the same guidance and are told to search
+    again with different wording if the first results are off-target.
 
 Google Search reads the browser's Google results page, spaces requests out, and can use the existing browser session when
 available. Google may still show a CAPTCHA or rate-limit the request; the mod then tries another configured provider. This is
@@ -232,7 +237,7 @@ its original name and restart.
 
 1. The sidebar only opens on a web page. On a new tab the URL bar icon is dimmed on purpose. Open a site first.
 2. Hover the URL bar: the chat icon appears on hover. No icon at all means the script isn't running: check the two Sine steps above.
-3. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see `[dia-sidebar] loaded v2.6.0`. A
+3. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see `[dia-sidebar] loaded v2.7.0`. A
    wrong script filename shows up as `[Sine]: Failed to load script`. If clicking the icon does nothing on a page, look for
    `[dia-sidebar] couldn't open the sidebar` and the error under it.
 
