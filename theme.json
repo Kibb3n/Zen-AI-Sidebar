@@ -1,7 +1,7 @@
 {
   "id": "dia-sidebar",
   "name": "Dia Sidebar",
-  "version": "2.9.0",
+  "version": "2.10.0",
   "description": "A Dia-style AI chat sidebar for Zen. Apple Intelligence via AFM Server, Gemini, Claude, OpenAI, DeepSeek, Ollama, or any OpenAI-compatible model. Web search, link following, drag-and-drop context, a live activity view, history, Skills and YouTube key moments. Press ⌘E/Ctrl+E on any page.",
   "author": "you",
   "homepage": "https://github.com/YOUR_USERNAME/dia-sidebar",

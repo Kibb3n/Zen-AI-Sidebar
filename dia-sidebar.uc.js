@@ -14,7 +14,7 @@
   const SEL_MSG = "dia-sidebar:selection";
   const MAX_CHARS = 24000;
   const MAX_REFS = 12;
-  const VERSION = "2.9.0";
+  const VERSION = "2.10.0";
   const DEFAULT_PROMPT = "Summarize this page into concise bullet points.";
   const SYSTEM =
     "You are an AI assistant living in a sidebar next to the web page the user is viewing. " +
@@ -686,14 +686,19 @@
   const APPLE_SYSTEM =
     "You are a friendly AI assistant living in a sidebar next to the web page the user is viewing. " +
     "Talk the way a good chatbot does in a normal conversation: warm, natural, plain language, in full sentences and short paragraphs, like a knowledgeable friend explaining something. " +
-    "Use the page content and anything the user attached. Start with the actual answer, then give the useful context. " +
-    "Write in flowing paragraphs: do not use bullet points, numbered lists, headings or tables unless the user clearly asks for a list, steps or a table. " +
-    "Bold at most a key term or two. If the page does not contain the answer, say so plainly and then say what you can. Never make up details.";
+    "Write in flowing paragraphs: do not use bullet points, numbered lists, headings or tables unless the user clearly asks for a list, steps or a table. Bold at most a key term or two. " +
+    "ACCURACY COMES FIRST. Base every factual claim on the page, the notes, the attachments or the sources you are given. " +
+    "Copy names, numbers, dates, prices and quotes exactly as they appear; never round, convert, combine or guess them. " +
+    "Do not add details about the page or its topic from memory, and if you do use general knowledge, say that it is general knowledge and not from the page. " +
+    "If the material only partly answers the question, or doesn't answer it, say plainly what is missing instead of filling the gap, then say what you can. " +
+    "Start with the answer itself. Say each thing once.";
+  // Effort changes how much checking is done, not how much is written: from Medium up the length is the same and fits the question.
+  const APPLE_LENGTH = "Make the answer as long as the question needs and no longer: a simple question gets a sentence or two, a bigger one gets a few short paragraphs. Don't pad, repeat yourself or add background nobody asked for.";
   const APPLE_STYLES = [
     "Keep it short: one or two friendly sentences.",
-    "Answer in one or two short, natural paragraphs.",
-    "Give a full, detailed answer the way a thorough chatbot would: several natural paragraphs that explain the key points and why they matter, add useful context, and give an example where it helps. Don't be brief, and don't turn it into a list.",
-    "Give a full, detailed answer the way a thorough chatbot would: several natural paragraphs that explain the key points and why they matter, add useful context, and give an example where it helps. Check what you say against the page and any sources, and mention anything the page doesn't cover. Don't be brief, and don't turn it into a list.",
+    APPLE_LENGTH,
+    APPLE_LENGTH + " First find the parts of the material that answer the question, then build the answer from those parts.",
+    APPLE_LENGTH + " First find the parts of the material that answer the question, then build the answer from those parts.",
   ];
   // the built-in prompts ask for bullets; on Apple Intelligence they ask for a friendly summary instead
   const chatty = (s) => s
@@ -1789,6 +1794,9 @@
       headers = { "content-type": "application/json", ...authHeaders() };
       body = { model: model(), stream: true, messages: [{ role: "system", content: system + (req.pageBlock ? "\n\n" + req.pageBlock : "") }, ...req.messages] };
       if (activeModel().reasoning) body.reasoning_effort = req.quick ? "low" : reasoningEffort(); // the Effort slider, for models that take it
+      // The small on-device model invents details when it samples freely, so keep it close to deterministic: 0 for the quick helper
+      // calls (routing, notes, fact-checking), a low value for the answer itself.
+      if (prov === "apple") body.temperature = req.quick ? 0 : 0.2;
     }
     let sawTool = false, toolIdx = -1, toolBuf = "";
     const results = [], cited = [];
@@ -2293,7 +2301,7 @@
   // for the question; Max also drafts an answer and then refines it.
   const NOTES_SYSTEM =
     "You are reading one excerpt of a longer web page for a reader who has a specific request. Write short plain-text notes (at most 80 words) " +
-    "with the facts, figures, names, dates, claims and quotes in this excerpt that matter for the request. No preamble. If the excerpt has nothing relevant, reply exactly NONE.";
+    "with the facts, figures, names, dates, claims and quotes in this excerpt that matter for the request. Copy numbers, names and dates exactly as written, and never add or infer anything the excerpt doesn't say. No preamble. If the excerpt has nothing relevant, reply exactly NONE.";
   function splitForReading(text, size) {
     const out = [];
     let cur = "";
@@ -2319,17 +2327,42 @@
     }
     return notes.map((n) => "• " + n).join("\n");
   }
-  async function refineRequest(req, signal, setStatus) {
+  // High and Max on the small on-device model: draft an answer, have a strict checker compare it with the sources claim by claim,
+  // and only if it finds problems rewrite the answer to fix them. The rewrite may not add anything or get longer, so effort buys
+  // accuracy and not extra words. Max checks twice. Returns the final text, or null to fall back to a normal single pass.
+  const CHECK_SYSTEM =
+    "You are a strict fact-checker. You get SOURCE material, the user's REQUEST and a DRAFT answer. Go through the draft claim by claim. " +
+    "A claim is a problem if the source does not state it, if the source contradicts it, or if a name, number, date, price or quote differs from the source. " +
+    "Plain connecting language is fine. Also flag it if the draft ignores what the request asked, or says the source covers something it doesn't. " +
+    "If there are no problems, reply exactly OK. Otherwise reply with one problem per line: what the draft says, and what the source actually says (or that the source never says it). Nothing else.";
+  async function verifiedAnswer(req, signal, setStatus, rounds) {
+    const cut = (t, n) => (t.length <= n ? t : t.slice(0, n - 1) + "…");
+    const c = req.messages[0].content, i = c.lastIndexOf("=== REQUEST ===");
+    const src = i > 0 ? c.slice(0, i).trim() : "", ask = i >= 0 ? c.slice(i + 15).trim() : c;
     try {
       setStatus("Drafting an answer…");
-      const draft = (await askOnce(req.system, req.messages[0].content, signal)).trim();
-      if (!draft) return req;
-      setStatus("Refining…");
-      const c = req.messages[0].content, i = c.lastIndexOf("=== REQUEST ===");
-      const src = i > 0 ? c.slice(0, i) : "", ask = i >= 0 ? c.slice(i) : c;
-      const cut = (t, n) => (t.length <= n ? t : t.slice(0, n - 1) + "…");
-      return { ...req, messages: [{ role: "user", content: `${cut(src, 4800)}\n\n=== DRAFT ANSWER ===\n${cut(draft, 2400)}\n\n${cut(ask, 1200)}\n\nImprove the draft answer above: fix anything the sources contradict, add important points it missed, and tighten the wording. Reply with only the improved answer.` }] };
-    } catch (e) { if (e.name === "AbortError") throw e; return req; }
+      let draft = (await askOnce(req.system, c, signal)).trim();
+      if (!draft) return null;
+      for (let r = 0; r < rounds; r++) {
+        setStatus(r ? "Checking it again…" : "Checking the facts…");
+        const verdict = (await askOnce(CHECK_SYSTEM, `=== SOURCE ===\n${cut(src, 5000)}\n\n=== REQUEST ===\n${cut(ask, 300)}\n\n=== DRAFT ===\n${cut(draft, 1500)}`, signal, true)).trim();
+        if (!verdict || /^OK\b/i.test(verdict)) break;
+        setStatus("Correcting the answer…");
+        const fixed = (await askOnce(req.system, `${cut(src, 4800)}\n\n=== DRAFT ANSWER ===\n${cut(draft, 1500)}\n\n=== PROBLEMS FOUND IN THE DRAFT ===\n${cut(verdict, 500)}\n\n=== REQUEST ===\n${cut(ask, 400)}\n\n` +
+          "Rewrite the draft as the final answer. Fix or remove every problem listed, using only the source. Keep everything that was correct, keep the same friendly flowing paragraphs with no lists, and do not make it longer. Reply with only the answer.", signal)).trim();
+        if (fixed) draft = fixed;
+      }
+      return draft;
+    } catch (e) { if (e.name === "AbortError" || signal?.aborted) throw e; return null; }
+  }
+  // hands an already-written answer to the chat a few words at a time, so it reads like the normal stream
+  async function* replayText(text, signal) {
+    const words = text.match(/\S+\s*/g) || [text];
+    for (let i = 0; i < words.length; i += 4) {
+      if (signal?.aborted) { const e = new Error("Aborted"); e.name = "AbortError"; throw e; }
+      yield { t: "text", d: words.slice(i, i + 4).join("") };
+      await new Promise((r) => setTimeout(r, 28));
+    }
   }
   // Writes the web search query from the whole conversation (earlier questions, the answers given, the page), not from the last
   // message alone. Returns { query, alt } or null when the model gave nothing usable.
@@ -3579,7 +3612,8 @@
           messages: [{ role: "user", content:
             (pageContext ? (includePage ? "Use the web page below to respond to the user's request." + (effort() <= 1 ? " Be concise." : "") + "\n\n" : "") + pageContext + "\n\n" : "") +
             (webContext ? webContext + "\n\n" : "") +
-            (transcript ? `=== CONVERSATION SO FAR ===\n${transcript}\n\n` : "") + `=== REQUEST ===\n${ask}` }],
+            (transcript ? `=== CONVERSATION SO FAR ===\n${transcript}\n\n` : "") + `=== REQUEST ===\n${ask}` +
+            (!resuming && effort() >= 2 && (pageContext || webContext) ? "\n\n(Any facts you state about the page or sources must come only from the material above: copy names and numbers exactly, and say so if something isn't covered.)" : "") }],
         };
       }
       const msgs = convo.slice(-24).map((m) => m.role === "assistant"
@@ -3988,17 +4022,18 @@
             catch (e) { if (signal.aborted) throw e; deep = null; }
             ds.done();
           }
-          const setStatus = (t) => flow.begin(t, { kind: "refine", done: /^Draft/.test(t) ? "Drafted an answer" : "Refined the answer" });
+          const setStatus = (t) => flow.begin(t, { kind: "refine", done: /^Draft/.test(t) ? "Drafted an answer" : /^Correct/.test(t) ? "Corrected the answer" : "Checked the facts" });
           for (let attempt = 0; ; attempt++) {
             try {
               let reqNow = buildRequest(!!prior, webCtx, deep, lead, queryHint);
-              if (provider() === "apple" && effort() >= 4 && !prior) { // Max: draft first, then stream the improved answer
-                reqNow = await refineRequest(reqNow, signal, setStatus);
+              if (provider() === "apple" && effort() >= 3 && !prior) { // High: draft, fact-check, fix. Max: check twice.
+                const final = await verifiedAnswer(reqNow, signal, setStatus, effort() >= 4 ? 2 : 1);
                 if (flow.active?.state === "active") flow.active.done();
+                if (final) reqNow = { ...reqNow, final };
               }
               if (reqNow.web && reqNow.forceWeb) flow.begin("Searching the web", { kind: "search", ico: "globe", done: "Searched the web" });
               else flow.wait();
-              for await (const ev of streamLLM(reqNow, signal)) {
+              for await (const ev of reqNow.final ? replayText(reqNow.final, signal) : streamLLM(reqNow, signal)) {
                 if (ev.t === "think") { onThink(ev.d); continue; }
                 if (ev.t === "status") {
                   const isSearch = /search/i.test(ev.d);
@@ -4401,6 +4436,7 @@
 
     // ----- effort slider: how much work the model puts into an answer -----
     const effortHint = (v) => {
+      if (provider() === "apple") return ["Quick, short answers.", "One careful pass. The answer is as long as the question needs.", "Reads long pages in full, drafts an answer, then fact-checks it against the page. Slower.", "The same, with a second fact-check. Slowest."][v - 1];
       const base = ["Quick, short answers.", "Balanced answers.", "Thorough answers.", "The most careful answers."][v - 1];
       const p = provider();
       const extra = p === "apple" ? ["", "", " Reads the whole page in parts first, so it takes longer.", " Reads the whole page, drafts an answer, then refines it. Slowest."][v - 1]

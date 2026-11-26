@@ -87,14 +87,19 @@ what that means depends on the model:
 | | Low | Medium | High | Max |
 |---|---|---|---|---|
 | **Answer style** | brief | balanced | thorough | thorough, checked against the sources |
-| **Apple Intelligence: what you read** | a sentence or two | one or two short, natural paragraphs | a full, detailed answer in several paragraphs: the key points, why they matter, context and an example, with no bullet lists | the same, checked against the page and sources, and says what the page doesn't cover |
-| **Apple Intelligence: how it works** | one quick pass | one pass, takes notes on linked pages | reads the **whole page in parts**, keeps notes for your question, then answers | also drafts an answer and **refines** it |
+| **Apple Intelligence: what you read** | a sentence or two | as long as the question needs (a sentence or two for a simple one, a few short paragraphs for a bigger one) | the same length as Medium, but fact-checked | the same length again, checked twice |
+| **Apple Intelligence: how it works** | one quick pass | one careful pass, takes notes on linked pages | reads long pages in parts, drafts an answer, **fact-checks it claim by claim against the page**, and corrects it only if something is wrong | the same, with a second fact-check |
 | **Gemini** | light thinking | light thinking | more thinking | longest thinking |
 | **Reasoning models** | `reasoning_effort` low | medium | high | high |
 
 Apple's on-device model only has a 4,096-token window, so higher effort works by doing more passes instead of cramming more
 into one. It is slower but gives far better answers on long pages. Short pages never need the extra reading. The quick
 background calls (like deciding whether to search) always stay at low effort.
+
+On Apple Intelligence, effort buys accuracy, not length: from Medium up the answer is the same length and only the amount of checking
+changes. The corrective rewrite is not allowed to add anything or get longer. The model also runs at a low temperature (0 for the
+helper calls, 0.2 for the answer) so it sticks to the page instead of improvising, and its prompt tells it to copy names, numbers
+and dates exactly and to say what the page doesn't cover.
 
 Effort is a slider in the sidebar because Sine's settings page has no slider control.
 
