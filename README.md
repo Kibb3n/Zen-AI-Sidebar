@@ -169,6 +169,11 @@ becomes **+** to put it back). After that first message, it becomes a normal rem
     don't match the question a second wording is tried. Results are merged, re-ranked by relevance (max two per site) and any
     page that can't be opened is replaced by the next result. Gemini and Claude get the same guidance and are told to search
     again with different wording if the first results are off-target.
+  - **Context-aware queries (v2.8):** with the globe on, a dedicated step writes the search query from the whole conversation
+    (earlier questions, the answers already given, the page you're on) instead of using your last message as typed, so follow-ups
+    like "what about the second one?" search for the right thing. Gemini and Claude get that query handed to them too.
+  - **Web search indicator (v2.8):** a "Web search is on" line stays above the text box for as long as the globe is on (click it to
+    turn it off). When you turn it off, "Web search is off" shows for a few seconds.
 
 Google Search reads the browser's Google results page, spaces requests out, and can use the existing browser session when
 available. Google may still show a CAPTCHA or rate-limit the request; the mod then tries another configured provider. This is
@@ -237,7 +242,7 @@ its original name and restart.
 
 1. The sidebar only opens on a web page. On a new tab the URL bar icon is dimmed on purpose. Open a site first.
 2. Hover the URL bar: the chat icon appears on hover. No icon at all means the script isn't running: check the two Sine steps above.
-3. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see `[dia-sidebar] loaded v2.7.0`. A
+3. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see `[dia-sidebar] loaded v2.8.0`. A
    wrong script filename shows up as `[Sine]: Failed to load script`. If clicking the icon does nothing on a page, look for
    `[dia-sidebar] couldn't open the sidebar` and the error under it.
 

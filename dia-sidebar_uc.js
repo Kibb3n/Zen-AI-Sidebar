@@ -14,7 +14,7 @@
   const SEL_MSG = "dia-sidebar:selection";
   const MAX_CHARS = 24000;
   const MAX_REFS = 12;
-  const VERSION = "2.7.0";
+  const VERSION = "2.8.0";
   const DEFAULT_PROMPT = "Summarize this page into concise bullet points.";
   const SYSTEM =
     "You are an AI assistant living in a sidebar next to the web page the user is viewing. " +
@@ -61,7 +61,13 @@
     "Examples: page 'Framework Laptop 13 review', user 'how much is it?' -> SEARCH: framework laptop 13 price. " +
     "Chat about the Lakers, user 'who won last night?' -> SEARCH: lakers game result last night. " +
     "User 'why do I get ECONNREFUSED 127.0.0.1:5432' -> SEARCH: ECONNREFUSED 127.0.0.1:5432 postgres fix. " +
-    "Only when the question has two separate parts or one query may miss, add a third line ALT: with a second query for the other part or from a different angle.";
+    "Only when the question has two separate parts or one query may miss, add an extra line ALT: with a second query for the other part or from a different angle.";
+  // A dedicated step that writes the query from the whole conversation (used for every web search, whichever model is chosen)
+  const QUERY_WRITER_SYSTEM =
+    "You write the web search query for a browser assistant. You are given the page the user is on, the conversation so far and the user's latest message. " +
+    "Do not copy the latest message. Work out what the user actually wants to find out right now, using the whole conversation: their earlier questions, the answers already given, " +
+    "what 'it', 'that', 'them', 'the second one', 'more' or 'what about X' refers to, and the page they are on. Then write the query a careful researcher would type to find exactly that. " +
+    "Reply with exactly one line: SEARCH: followed by the query. " + QUERY_RULES + " Never add anything else.";
   // For models without a built-in search tool: one quick call decides whether (and what) to search
   const ROUTER_SYSTEM =
     "You help a browser assistant decide whether it must look further than the page the user is viewing to answer their latest message. " +
@@ -408,6 +414,12 @@
   .dia-send:active { transform: scale(0.92); }
   .dia-send[disabled] { opacity: 0.3; cursor: default; }
   .dia-addnote { font-size: 12px; color: var(--mute); padding: 0 2px; animation: dia-fade 0.3s ease both; }
+  .dia-webstatus { display: flex; align-items: center; gap: 6px; padding: 0 2px; font-size: 12px; line-height: 1.3; color: var(--accent); cursor: pointer; animation: dia-fade 0.3s ease both; }
+  .dia-webstatus .dia-svg { width: 14px; height: 14px; flex: none; stroke-width: 1.8; }
+  .dia-webstatus b { font-weight: 600; }
+  .dia-webstatus .dia-webstatus-act { margin-left: auto; color: var(--mute); }
+  .dia-webstatus:hover .dia-webstatus-act { color: var(--fg); }
+  .dia-webstatus.dia-off { color: var(--mute); cursor: default; }
 
   /* web sources */
   .dia-sources { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 12px; color: var(--mute); animation: dia-fade 0.4s ease both; }
@@ -1756,7 +1768,8 @@
   async function* streamRaw(req, signal) {
     const prov = provider();
     const system = req.system + (req.web ? "\n\n" + SEARCH_NUDGE : "") +
-      (req.web && req.forceWeb ? "\n\nWeb search is required for this request: search the web for current information before answering." : "");
+      (req.web && req.forceWeb ? "\n\nWeb search is required for this request: search the web for current information before answering. Write your own search query from the whole conversation and the page, never just the user's latest message word for word." +
+        (req.queryHint ? ` A search query has already been written for you from the conversation: "${req.queryHint}". Search for that, or for a sharper version of it if the results are off.` : "") : "");
     if (prov === "gemini") { yield* geminiStream(req, system, signal); return; }
     let url, headers, body;
     if (prov === "anthropic") {
@@ -2305,6 +2318,27 @@
       return { ...req, messages: [{ role: "user", content: `${cut(src, 4800)}\n\n=== DRAFT ANSWER ===\n${cut(draft, 2400)}\n\n${cut(ask, 1200)}\n\nImprove the draft answer above: fix anything the sources contradict, add important points it missed, and tighten the wording. Reply with only the improved answer.` }] };
     } catch (e) { if (e.name === "AbortError") throw e; return req; }
   }
+  // Writes the web search query from the whole conversation (earlier questions, the answers given, the page), not from the last
+  // message alone. Returns { query, alt } or null when the model gave nothing usable.
+  async function composeQuery(convo, page, signal) {
+    const last = [...convo].reverse().find((m) => m.role === "user");
+    const msg = (last?.label || last?.content || "").replace(/\s+/g, " ").slice(0, 500);
+    const small = provider() === "apple";
+    const line = (m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${(m.label || m.content || "").replace(/\s+/g, " ").slice(0, m.role === "assistant" ? (small ? 220 : 500) : (small ? 160 : 320))}`;
+    const history = convo.slice(small ? -5 : -9, -1).map(line).join("\n");
+    const excerpt = page?.text ? focusText(page.text, msg, small ? 700 : 1800) : "";
+    const ctx = `Today is ${new Date().toDateString()}.\n` +
+      (page?.title ? `Page the user is on: ${page.title}${page.url ? " (" + hostOf(page.url) + ")" : ""}\n` : "") +
+      (excerpt ? `Page excerpt:\n${excerpt}\n` : "") +
+      (history ? `Conversation so far:\n${history}\n` : "") + `Latest user message: ${msg}`;
+    let out = "";
+    try { out = await askOnce(QUERY_WRITER_SYSTEM, ctx, signal, true); } catch (e) { if (signal?.aborted) throw e; return null; }
+    const q = tidyQuery(out.match(/SEARCH:\s*(.+)/i)?.[1], msg);
+    if (!q) return null;
+    let alt = tidyQuery(out.match(/ALT:\s*(.+)/i)?.[1], msg);
+    if (alt && sameQuery(alt, q)) alt = "";
+    return { query: q, alt };
+  }
   // Asks the model whether to search the web or open some of the page's links; returns { query } or { links }.
   // Only a short, locally ranked candidate list is shown (never all of the page's links), which is what lets a 4,096-token
   // model choose well.
@@ -2332,6 +2366,11 @@
     const am = out.match(/ALT:\s*(.+)/i);
     let alt = tidyQuery(am?.[1], msg);
     if (alt && sameQuery(alt, q)) alt = "";
+    if (q || forced) {
+      // the query is written from the whole conversation, so follow-ups ("what about the second one?") search for the right thing
+      const composed = convo.length > 1 || page?.title ? await composeQuery(convo, page, signal) : null;
+      if (composed) return { query: composed.query, alt: composed.alt || alt, links: [], say };
+    }
     if (q) return { query: q, alt, links: [], say };
     // no usable query from the model: build one from the message (and the page's subject) rather than sending the raw message
     return { query: forced ? fallbackQuery(msg, page) : "", alt: "", links: [], say: forced ? say : "" };
@@ -2824,7 +2863,7 @@
     const reading = new Set(); // tab / link reads still in flight
     let picker = null, linkCache = { key: "", links: [], pending: false }; // the tab & link picker, and the page's links read ahead of time
     let members = [src]; // all tabs this chat spans — >1 when opened over a split view
-    let self = null, noteEl = null, noteTimer = null, pop = null;
+    let self = null, noteEl = null, noteTimer = null, pop = null, webStatusEl = null, webOffTimer = null;
     const isMember = (t) => t === src || members.includes(t);
 
     const srcUrl = () => {
@@ -3421,16 +3460,41 @@
     }
     // The persistent globe forces a search for each message in this chat, including when global
     // search is Off. Browser-side search works for AFM and other models without a native search tool.
-    function updateWebBtn() {
+    // The line above the text box: always there while web search is on, and shown for a few seconds after it is turned off
+    function clearWebStatus() { clearTimeout(webOffTimer); webOffTimer = null; if (webStatusEl) { webStatusEl.remove(); webStatusEl = null; } }
+    function syncWebStatus(offFlash) {
+      if (!input || !input.parentNode) return;
+      if (!webOn && !offFlash) { if (!webOffTimer) clearWebStatus(); return; } // keep a "turned off" message until its timer ends
+      if (!webStatusEl) {
+        webStatusEl = h("div", { className: "dia-webstatus", onclick: () => { if (webOn) setWeb(false); } });
+        webStatusEl.setAttribute("role", "status");
+        webStatusEl.addEventListener("mousedown", (e) => e.preventDefault()); // keep typing focus in the box
+      }
+      if (webOn) {
+        clearTimeout(webOffTimer); webOffTimer = null;
+        webStatusEl.className = "dia-webstatus";
+        webStatusEl.title = "Click to turn web search off";
+        webStatusEl.replaceChildren(icon("globe"), h("span", {}, h("b", { textContent: "Web search is on" })), h("span", { className: "dia-webstatus-act", textContent: "Turn off" }));
+      } else {
+        clearTimeout(webOffTimer);
+        webStatusEl.className = "dia-webstatus dia-off";
+        webStatusEl.title = "";
+        webStatusEl.replaceChildren(icon("globe"), h("span", { textContent: "Web search is off: it will only use links on this page." }));
+        webOffTimer = setTimeout(clearWebStatus, 4500);
+      }
+      if (webStatusEl.nextSibling !== input) input.before(webStatusEl);
+    }
+    function updateWebBtn(offFlash) {
       if (!webBtnEl) return;
       webBtnEl.classList.toggle("on", webOn);
       webBtnEl.setAttribute("aria-pressed", String(webOn));
       webBtnEl.title = webOn ? "The internet is on for this chat. Click to turn it off." : "Let the assistant search the internet. Without it, it only uses links on the page you're on.";
+      syncWebStatus(offFlash === true);
     }
     function setWeb(on) {
+      const was = webOn;
       webOn = !!on;
-      updateWebBtn();
-      if (webOn) flashNote("Web search is on for this chat."); else flashNote("Web search is off: it will only use links on this page.");
+      updateWebBtn(was && !webOn);
     }
     function pickSkill(s) { skill = s; renderPills(); focusInput(); }
 
@@ -3465,7 +3529,7 @@
     }
     // Every request is rebuilt from scratch. Cloud/large models get the page in the system prompt plus
     // real multi-turn history. Apple's tiny on-device model ignores history, so it gets one flattened turn.
-    function buildRequest(resuming, webCtx, deep, lead) {
+    function buildRequest(resuming, webCtx, deep, lead, queryHint = "") {
       const lastU = [...convo].reverse().find((m) => m.role === "user");
       const firstU = convo.find((m) => m.role === "user");
       const firstTurn = lastU === firstU;
@@ -3512,7 +3576,7 @@
       const linkSearch = WANTS_PAGE_LINKS.test(lastU?.label || lastU?.content || "");
       const forced = !!lastU?.web; // the globe: the only thing that lets a request reach the internet
       const nativeWeb = isNative() && !searchBroken.has(provider()) && forced && !linkSearch; // page-link requests use the captured page links directly
-      return { system: systemPrompt() + leadNote + (forced ? "" : noWebNote), pageBlock: [pageBlock, webCtx?.text].filter(Boolean).join("\n\n"), messages: msgs, web: nativeWeb, forceWeb: forced };
+      return { system: systemPrompt() + leadNote + (forced ? "" : noWebNote), pageBlock: [pageBlock, webCtx?.text].filter(Boolean).join("\n\n"), messages: msgs, web: nativeWeb, forceWeb: forced, queryHint: nativeWeb ? queryHint : "" };
     }
 
     // ----- messages in the log -----
@@ -3893,6 +3957,15 @@
           // the globe (web + links) or, without it, the links on the loaded page; the built-in search tool of Gemini/Claude only ever runs with the globe
           const wantsSearch = !prior && (canWeb || linkSearch || (!lastU?.fromSkill && !!searchPage?.links?.length));
           if (wantsSearch && (linkSearch || !isNative() || (canWeb && searchBroken.has(provider())))) await runFallback();
+          // Gemini/Claude run their own search tool, so first write the query from the whole conversation and hand it over
+          let queryHint = "";
+          if (wantsSearch && canWeb && !linkSearch && isNative() && !searchBroken.has(provider()) && (convo.length > 1 || searchPage?.title)) {
+            const qs = flow.begin("Writing a search query from the conversation", { kind: "plan", dots: true, done: "Wrote a search query" });
+            try {
+              const c = await composeQuery(convo, searchPage, signal);
+              if (c) { queryHint = c.query; qs.done(`Search query: “${c.query}”`); } else qs.drop();
+            } catch (e) { if (signal.aborted) throw e; qs.drop(); }
+          }
           // High effort on the small on-device model: read the whole page in parts, keep notes for this question
           let deep = null;
           if (provider() === "apple" && effort() >= 3 && !prior && lastU === firstU && lastU?.pageContext !== false && page && !page.none && page.text.length > chunkSize() * 1.3) {
@@ -3904,7 +3977,7 @@
           const setStatus = (t) => flow.begin(t, { kind: "refine", done: /^Draft/.test(t) ? "Drafted an answer" : "Refined the answer" });
           for (let attempt = 0; ; attempt++) {
             try {
-              let reqNow = buildRequest(!!prior, webCtx, deep, lead);
+              let reqNow = buildRequest(!!prior, webCtx, deep, lead, queryHint);
               if (provider() === "apple" && effort() >= 4 && !prior) { // Max: draft first, then stream the improved answer
                 reqNow = await refineRequest(reqNow, signal, setStatus);
                 if (flow.active?.state === "active") flow.active.done();
@@ -4585,7 +4658,7 @@
       gen++;
       page = null; convo = []; refs = []; queue = []; started = false; generating = false;
       chatId = null; chatTitle = ""; pageRefPromoted = false; usePage = !!srcUrl() && bool("attachpage", true); skill = null; formats = []; manage = false; webOn = false;
-      closePop(); closePicker(); closeHMenu(); closeSheet(); clearNote();
+      closePop(); closePicker(); closeHMenu(); closeSheet(); clearNote(); clearWebStatus();
       if (input) { input.value = ""; autosize(); }
       logEl.replaceChildren();
       setBusy(false);
