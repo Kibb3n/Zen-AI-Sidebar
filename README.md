@@ -172,6 +172,10 @@ becomes **+** to put it back). After that first message, it becomes a normal rem
   - **Context-aware queries (v2.8):** with the globe on, a dedicated step writes the search query from the whole conversation
     (earlier questions, the answers already given, the page you're on) instead of using your last message as typed, so follow-ups
     like "what about the second one?" search for the right thing. Gemini and Claude get that query handed to them too.
+  - **Own queries for every model (v2.8):** Gemini and Claude no longer pick their own search terms by default (they tended to search
+    your message as typed). The assistant writes the query, searches, reads the pages and answers from them. A query that still
+    says "this"/"it" is anchored to the page's subject. To go back to their built-in search, set *How the assistant searches* in
+    Settings.
   - **Web search indicator (v2.8):** a "Web search is on" line stays above the text box for as long as the globe is on (click it to
     turn it off). When you turn it off, "Web search is off" shows for a few seconds.
 

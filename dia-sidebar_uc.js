@@ -660,6 +660,9 @@
   // the page that is already loaded and the links on that page, nothing else. (The old Automatic / Only when I ask / Off
   // setting is gone: it is always "manual" now, whatever an older version saved.)
   const webMode = () => "manual";
+  // "own": the assistant writes the query from the conversation, searches, reads the pages and answers from them (any model).
+  // "builtin": Gemini/Claude run their own search tool, which picks its own queries.
+  const ownSearch = () => pref("searchmode", "own") !== "builtin";
   // if Anthropic/Gemini reject their built-in search tool (plan, region, model), we search from the browser instead
   const searchBroken = new Set(); // providers whose built-in search tool was refused (remembered per provider)
   // messages that are clearly about live / outside information search even if the model wouldn't have chosen to
@@ -1989,10 +1992,20 @@
     let s = tidyQuery(msg, msg);
     const vague = /\b(?:it|its|this|that|these|those|they|them|he|she|his|her|there)\b/i.test(s) || qterms(s).length < 2;
     if (vague && page?.title) {
-      const title = page.title.replace(/\s+[|\-–—·•]\s+[^|\-–—·•]{2,40}$/, "").trim();
+      const title = page.title.replace(/\s*[:|]\s*r\/\w+\s*$/i, "").replace(/\s+[|\-–—·•]\s+[^|\-–—·•]{2,40}$/, "").trim();
       s = (title.split(/\s+/).slice(0, 10).join(" ") + " " + s).trim();
     }
     return (s || String(msg || "")).slice(0, 200);
+  }
+  // "what is this about?" means nothing to a search engine: when the query still says it/this/that (or has almost no words),
+  // put the page's subject in front of it
+  function anchorQuery(q, msg, page) {
+    if (!page?.title) return q;
+    const vague = /\b(?:it|its|this|that|these|those|they|them|he|she|there)\b/i.test(q) || qterms(q).length < 2;
+    if (!vague) return q;
+    const title = page.title.replace(/\s*[:|]\s*r\/\w+\s*$/i, "").replace(/\s+[|\-–—·•]\s+[^|\-–—·•]{2,40}$/, "").trim().split(/\s+/).slice(0, 12).join(" ");
+    const rest = q.replace(/\b(?:it|its|this|that|these|those|they|them|he|she|there|about|what|is|are|whats)\b/gi, " ").replace(/\s+/g, " ").trim();
+    return tidyQuery(`${title} ${rest}`.trim(), msg);
   }
   const UNREADABLE = /(?:^|\.)(?:pinterest\.[a-z.]+|facebook\.com|instagram\.com|tiktok\.com|x\.com|twitter\.com|linkedin\.com)$/;
   const normUrl = (u) => { try { const x = new URL(u); for (const k of [...x.searchParams.keys()]) if (/^(?:utm_|fbclid|gclid|ref$)/i.test(k)) x.searchParams.delete(k); return (x.hostname.replace(/^www\./, "") + x.pathname.replace(/\/$/, "") + x.search).toLowerCase(); } catch { return u; } };
@@ -2333,8 +2346,9 @@
       (history ? `Conversation so far:\n${history}\n` : "") + `Latest user message: ${msg}`;
     let out = "";
     try { out = await askOnce(QUERY_WRITER_SYSTEM, ctx, signal, true); } catch (e) { if (signal?.aborted) throw e; return null; }
-    const q = tidyQuery(out.match(/SEARCH:\s*(.+)/i)?.[1], msg);
+    let q = tidyQuery(out.match(/SEARCH:\s*(.+)/i)?.[1], msg);
     if (!q) return null;
+    q = anchorQuery(q, msg, page);
     let alt = tidyQuery(out.match(/ALT:\s*(.+)/i)?.[1], msg);
     if (alt && sameQuery(alt, q)) alt = "";
     return { query: q, alt };
@@ -2362,7 +2376,7 @@
     if (links.length) return { query: "", links, say };
     if (!allowSearch) return { query: "", links: [], say: "" }; // no globe: never a web query
     const m = out.match(/SEARCH:\s*(.+)/i);
-    const q = tidyQuery(m?.[1], msg);
+    const q = m?.[1] ? anchorQuery(tidyQuery(m[1], msg), msg, page) : "";
     const am = out.match(/ALT:\s*(.+)/i);
     let alt = tidyQuery(am?.[1], msg);
     if (alt && sameQuery(alt, q)) alt = "";
@@ -3575,7 +3589,7 @@
       if (resuming) msgs.push({ role: "user", content: "Continue exactly where you stopped. Do not repeat what you already wrote." });
       const linkSearch = WANTS_PAGE_LINKS.test(lastU?.label || lastU?.content || "");
       const forced = !!lastU?.web; // the globe: the only thing that lets a request reach the internet
-      const nativeWeb = isNative() && !searchBroken.has(provider()) && forced && !linkSearch; // page-link requests use the captured page links directly
+      const nativeWeb = isNative() && !ownSearch() && !searchBroken.has(provider()) && forced && !linkSearch; // page-link requests use the captured page links directly
       return { system: systemPrompt() + leadNote + (forced ? "" : noWebNote), pageBlock: [pageBlock, webCtx?.text].filter(Boolean).join("\n\n"), messages: msgs, web: nativeWeb, forceWeb: forced, queryHint: nativeWeb ? queryHint : "" };
     }
 
@@ -3956,10 +3970,10 @@
           };
           // the globe (web + links) or, without it, the links on the loaded page; the built-in search tool of Gemini/Claude only ever runs with the globe
           const wantsSearch = !prior && (canWeb || linkSearch || (!lastU?.fromSkill && !!searchPage?.links?.length));
-          if (wantsSearch && (linkSearch || !isNative() || (canWeb && searchBroken.has(provider())))) await runFallback();
+          if (wantsSearch && (linkSearch || !isNative() || (canWeb && (ownSearch() || searchBroken.has(provider()))))) await runFallback();
           // Gemini/Claude run their own search tool, so first write the query from the whole conversation and hand it over
           let queryHint = "";
-          if (wantsSearch && canWeb && !linkSearch && isNative() && !searchBroken.has(provider()) && (convo.length > 1 || searchPage?.title)) {
+          if (wantsSearch && canWeb && !linkSearch && isNative() && !ownSearch() && !searchBroken.has(provider()) && (convo.length > 1 || searchPage?.title)) {
             const qs = flow.begin("Writing a search query from the conversation", { kind: "plan", dots: true, done: "Wrote a search query" });
             try {
               const c = await composeQuery(convo, searchPage, signal);

@@ -35,6 +35,23 @@
     "label": "**Search provider**\n*Used when the globe is on. Configured alternatives are tried automatically if a search is unavailable or rate-limited.*"
   },
   {
+    "property": "mod.dia-sidebar.searchmode",
+    "label": "How the assistant searches",
+    "type": "dropdown",
+    "defaultValue": "own",
+    "placeholder": false,
+    "options": [
+      {
+        "label": "Writes its own queries from the conversation (recommended)",
+        "value": "own"
+      },
+      {
+        "label": "Gemini / Claude's built-in search (picks its own queries)",
+        "value": "builtin"
+      }
+    ]
+  },
+  {
     "property": "mod.dia-sidebar.searchengine",
     "label": "Preferred search provider",
     "type": "dropdown",
