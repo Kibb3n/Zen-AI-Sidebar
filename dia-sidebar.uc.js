@@ -14,7 +14,7 @@
   const SEL_MSG = "dia-sidebar:selection";
   const MAX_CHARS = 24000;
   const MAX_REFS = 12;
-  const VERSION = "2.10.0";
+  const VERSION = "2.12.0";
   const DEFAULT_PROMPT = "Summarize this page into concise bullet points.";
   const SYSTEM =
     "You are an AI assistant living in a sidebar next to the web page the user is viewing. " +
@@ -2016,6 +2016,8 @@
     return tidyQuery(`${title} ${rest}`.trim(), msg);
   }
   const UNREADABLE = /(?:^|\.)(?:pinterest\.[a-z.]+|facebook\.com|instagram\.com|tiktok\.com|x\.com|twitter\.com|linkedin\.com)$/;
+  const PRIMARY_HOST = /(?:^|\.)(?:wikipedia\.org|github\.com|developer\.mozilla\.org|arxiv\.org|nih\.gov|who\.int|apnews\.com|reuters\.com|nature\.com|[a-z0-9-]+\.gov(?:\.[a-z]{2})?|[a-z0-9-]+\.edu|docs\.[a-z0-9.-]+|support\.[a-z0-9.-]+)$/;
+  const THIN_HOST = /(?:^|\.)(?:quora\.com|answers\.com|ehow\.com|slideshare\.net|scribd\.com)$/;
   const normUrl = (u) => { try { const x = new URL(u); for (const k of [...x.searchParams.keys()]) if (/^(?:utm_|fbclid|gclid|ref$)/i.test(k)) x.searchParams.delete(k); return (x.hostname.replace(/^www\./, "") + x.pathname.replace(/\/$/, "") + x.search).toLowerCase(); } catch { return u; } };
   // how well one result matches the question: terms in its title, snippet, address and site, weighted, plus how much of the question it covers
   function scoreResult(r, terms, rank) {
@@ -2036,6 +2038,8 @@
     const cover = terms.length ? hit / terms.length : 1;
     s += cover * 4 + Math.max(0, 6 - rank) * 0.4;
     if (UNREADABLE.test(host)) s -= 3; // login walls: the page can't be read anyway
+    if (PRIMARY_HOST.test(host)) s += 1.2; // official, reference and primary-source sites are a safer bet than content farms
+    if (THIN_HOST.test(host)) s -= 1.5;
     return { s, cover };
   }
   // Searches with the model's query; if the results don't match the question (or a second angle was asked for), tries another
@@ -2071,12 +2075,20 @@
     }
     return { results: [...keep, ...rest].slice(0, 6), queries };
   }
-  // Opens the top results and keeps the passages that matter for the query (not just the first few hundred characters)
-  async function readSources(results, signal, cap, query, chips) {
+  // Opens the top results. Each page keeps `evidence` (the passages that matter for the question, about 3,800 characters: this is
+  // what the answer is checked against), `text` (a shorter version that goes to the model) and `date` (when it was published).
+  async function readSources(results, signal, cap, query, chips, o = {}) {
     const one = async (r, chip) => {
+      if (r.tried) return !!r.evidence;
+      r.tried = true;
       try {
         const pg = await fetchReadable(r.url, signal, { ms: 7000 });
-        if (pg.ok && pg.text) { r.text = focusText(pg.text, query || r.title, cap); chip?.done(); return true; }
+        if (pg.ok && pg.text) {
+          r.evidence = focusText(pg.text, query || r.title, Math.max(cap, 3800));
+          r.text = r.evidence.length <= cap ? r.evidence : focusText(pg.text, query || r.title, cap);
+          r.date = pg.date || "";
+          chip?.done(); return true;
+        }
         chip?.fail();
       } catch (e) { if (signal?.aborted) throw e; chip?.fail(); }
       return false;
@@ -2085,6 +2097,52 @@
     const missing = wave.filter((ok) => !ok).length;
     if (missing) await Promise.all(results.slice(3, 3 + missing).map((r) => one(r))); // a page that wouldn't open is replaced by the next result
   }
+  // Do the pages that were read actually talk about what was asked? Measured on the query's own words, in code, not by the model.
+  function evidenceCoverage(results, query) {
+    const terms = [...new Set(ftokens(query).filter((w) => !/^20\d\d$/.test(w)))];
+    const read = results.filter((r) => r.evidence);
+    if (!terms.length) return { union: 1, best: 1 };
+    if (!read.length) return { union: 0, best: 0 };
+    const all = new Set();
+    let best = 0;
+    for (const r of read) {
+      const t = new Set(ftokens(r.evidence + " " + r.title));
+      const hit = terms.filter((w) => t.has(w));
+      hit.forEach((w) => all.add(w));
+      best = Math.max(best, hit.length / terms.length);
+    }
+    return { union: all.size / terms.length, best };
+  }
+  // The sources that go to the model: the pages that best match the question (newer ones first when it is about something
+  // current), at most k of them. The small model gets three; bigger models also keep a couple of unread results as snippets.
+  const FRESH_Q = /\b(?:latest|newest|current(?:ly)?|now|today|tonight|this (?:week|month|year)|recent(?:ly)?|news|price|prices|cost|release|version|score|standings|20(?:2[4-9]|3\d))\b/i;
+  function chooseSources(results, query, ask, k) {
+    const terms = [...new Set(ftokens(query))];
+    const fresh = FRESH_Q.test(query + " " + ask);
+    const score = (r) => {
+      if (!r.evidence) return -1;
+      let v = terms.length ? terms.filter((w) => new Set(ftokens(r.evidence + " " + r.title)).has(w)).length / terms.length : 1;
+      if (fresh && r.date) { const age = (Date.now() - Date.parse(r.date)) / 31557600000; v += age < 1 ? 0.15 : age > 3 ? -0.2 : 0; }
+      return v;
+    };
+    const read = results.map((r, i) => ({ r, i, v: score(r) })).filter((x) => x.v >= 0).sort((a, b) => b.v - a.v || a.i - b.i).slice(0, k).map((x) => x.r);
+    const rest = results.filter((r) => !read.includes(r));
+    return k >= 5 ? [...read, ...rest.slice(0, Math.max(0, 5 - read.length))] : read.length ? read : rest.slice(0, k);
+  }
+  // The small model reads each page as short notes (exact figures and names) instead of a few cut-off hundred characters.
+  async function noteSources(list, ask, signal, step) {
+    for (const r of list) {
+      if (!r.evidence || r.evidence.length < 900) continue;
+      step?.set(`Taking notes on ${hostOf(r.url)}`);
+      try {
+        const out = (await askOnce(NOTES_SYSTEM, `Request: ${String(ask).slice(0, 300)}\n\nExcerpt from “${r.title}” (${hostOf(r.url)}):\n${r.evidence}`, signal, true)).trim();
+        if (out && !/^NONE\b/i.test(out)) r.text = out.replace(/\s+/g, " ").slice(0, 600);
+      } catch (e) { if (signal?.aborted) throw e; }
+    }
+  }
+  const fmtDay = (iso) => { const d = new Date(iso + "T00:00:00"); return isNaN(d) ? "" : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); };
+  // what each numbered source really says, for checking the answer against it afterwards
+  const sourceTexts = (list) => list.map((r) => [r.date ? "Published " + r.date + " " + fmtDay(r.date) : "", r.title, r.evidence || r.text || r.snippet || ""].join("\n"));
   // ---------- links: understanding them, picking the right ones, reading them ----------
   // The page's links arrive from extractPageLinks with their context. Here we (1) work out whether the user wants links
   // followed, (2) pick the right ones locally (explicit URLs, "the third source", names, keywords) so even the tiny
@@ -2200,6 +2258,15 @@
     const meta = (sel) => (doc.querySelector(sel)?.getAttribute("content") || "").trim();
     const title = meta('meta[property="og:title"]') || (doc.title || "").trim();
     const desc = meta('meta[name="description"]') || meta('meta[property="og:description"]');
+    // when the page was published, so "latest" questions can tell a fresh source from a stale one
+    const date = (() => {
+      const found = [];
+      for (const sc of doc.querySelectorAll('script[type="application/ld+json"]')) { const t = sc.textContent || ""; const m = t.match(/"datePublished"\s*:\s*"([^"]+)"/) || t.match(/"dateCreated"\s*:\s*"([^"]+)"/); if (m) found.push(m[1]); }
+      found.push(meta('meta[property="article:published_time"]'), meta('meta[itemprop="datePublished"]'), meta('meta[name="date"]'), meta('meta[name="dc.date"]'), meta('meta[name="DC.date.issued"]'), meta('meta[name="publish-date"]'),
+        doc.querySelector("time[datetime]")?.getAttribute("datetime") || "", meta('meta[property="article:modified_time"]'), meta('meta[property="og:updated_time"]'));
+      for (const raw of found) { const t = Date.parse(raw); if (raw && !isNaN(t) && t > Date.parse("1995-01-01") && t < Date.now() + 864e5) return new Date(t).toISOString().slice(0, 10); }
+      return "";
+    })();
     doc.querySelectorAll("script,style,noscript,nav,header,footer,aside,form,svg,iframe,template,[aria-hidden=true],.sidebar,#comments,.comments,.cookie-banner").forEach((n) => n.remove());
     const root = doc.querySelector("article, main, [role=main], #mw-content-text, #content, .post-content, .entry-content") || doc.body;
     const lines = [], seen = new Set();
@@ -2211,7 +2278,7 @@
     }
     let text = lines.join("\n");
     if (text.length < 300) text = (root?.textContent || "").replace(/\s+/g, " ").trim();
-    return { title, desc, text };
+    return { title, desc, text, date };
   }
   async function fetchReadable(url, signal, { ms = 8500, credentials = "omit" } = {}) {
     const c = new AbortController();
@@ -2233,28 +2300,82 @@
     } finally { clearTimeout(timer); signal?.removeEventListener("abort", onAbort); }
   }
   // the passages of a long text that matter for a request (plus its opening), in their original order
+  // Words used for matching a question to passages: like ltokens, but short numbers count too (\"Laptop 13\", \"iPhone 16\")
+  const ftokens = (s) => (String(s || "").toLowerCase().match(/[\p{L}\p{N}]{3,}|\b\d{1,2}\b/gu) || []).filter((w) => !LSTOP.has(w));
+  const MONTH_WORD = /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i;
+  // lines of the page, with very long paragraphs cut into sentence groups so the answer in the middle of one is not lost
+  function splitUnits(text, maxLen = 450) {
+    const out = [];
+    for (const raw of String(text).split("\n")) {
+      const line = raw.trim();
+      if (!line) continue;
+      if (line.length <= maxLen + 100) { out.push(line); continue; }
+      let cur = "";
+      for (const sent of line.split(/(?<=[.!?。！？])\s+/)) {
+        if (cur && cur.length + sent.length + 1 > maxLen) { out.push(cur); cur = ""; }
+        if (sent.length > maxLen) { for (let i = 0; i < sent.length; i += maxLen) out.push(sent.slice(i, i + maxLen)); continue; }
+        cur += (cur ? " " : "") + sent;
+      }
+      if (cur) out.push(cur);
+    }
+    return out;
+  }
+  // BM25 relevance of each passage to the question: rare words count for more than common ones, words that sit together as in the
+  // question count extra, and when the question asks "how much" or "when" a passage that holds a figure or a date ranks higher.
+  function bm25Scores(docs, qtokens, query) {
+    const N = docs.length;
+    if (!N || !qtokens.length) return docs.map(() => 0);
+    const toks = docs.map((d) => ftokens(d));
+    const df = new Map(qtokens.map((w) => [w, 0]));
+    for (const t of toks) { const set = new Set(t); for (const w of qtokens) if (set.has(w)) df.set(w, df.get(w) + 1); }
+    const avg = toks.reduce((a, t) => a + t.length, 0) / N || 1;
+    const wantsNum = /\b(?:how (?:much|many)|price|prices|cost|costs|worth|fee|fees|rate|percent|percentage|number of|population|size|salary|revenue|score)\b|[$€£]/i.test(query);
+    const wantsDate = /\b(?:when|what (?:year|day|date)|release[sd]?|launch(?:ed)?|date|deadline|founded|born|died|announced|schedule)\b/i.test(query);
+    return toks.map((t, i) => {
+      const tf = new Map();
+      for (const w of t) tf.set(w, (tf.get(w) || 0) + 1);
+      let sc = 0;
+      for (const w of qtokens) {
+        const f = tf.get(w);
+        if (!f) continue;
+        const idf = Math.log(1 + (N - df.get(w) + 0.5) / (df.get(w) + 0.5));
+        sc += (idf * f * 2.2) / (f + 1.2 * (0.4 + (0.6 * t.length) / avg));
+      }
+      if (sc > 0) {
+        const low = docs[i].toLowerCase();
+        for (let k = 0; k < qtokens.length - 1; k++) if (low.includes(qtokens[k] + " " + qtokens[k + 1])) sc += 1.2;
+        if (wantsNum && /[$€£]\s?\d|\d[\d,.]*\s?(?:%|percent|million|billion|usd|eur|gbp)|\b\d{2,}\b/i.test(docs[i])) sc *= 1.35;
+        if (wantsDate && (MONTH_WORD.test(docs[i]) || /\b(?:19|20)\d\d\b/.test(docs[i]))) sc *= 1.35;
+      }
+      return sc;
+    });
+  }
   function focusText(text, query, cap) {
     if (text.length <= cap) return text;
-    const q = new Set(ltokens(query));
-    if (!q.size) return condense(text, cap);
-    const units = text.split("\n").map((u) => u.trim()).filter(Boolean);
-    const scored = units.map((u, i) => {
-      const ws = ltokens(u);
-      let s = 0;
-      for (const w of ws) if (q.has(w)) s += 1;
-      return { u, i, s: i === 0 ? s / Math.sqrt(ws.length || 1) + 1 : s / Math.sqrt(ws.length || 1) };
-    });
-    if (!scored.some((x) => x.s > 0.9 && x.i !== 0)) return condense(text, cap);
-    const out = [];
+    const q = [...new Set(ftokens(query))];
+    if (!q.length) return condense(text, cap);
+    const units = splitUnits(text);
+    const sc = bm25Scores(units, q, query);
+    if (!sc.some((v, i) => v > 0 && i !== 0)) return condense(text, cap);
+    const order = sc.map((v, i) => ({ i, v: i === 0 ? v + 0.5 : v })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
+    const chosen = new Set();
     let used = 0;
-    for (const x of [...scored].sort((a, b) => b.s - a.s)) {
-      if (x.s <= 0 && out.length) break;
-      const piece = x.u.length > 600 ? x.u.slice(0, 600) + "…" : x.u;
-      if (used + piece.length + 1 > cap) continue;
-      out.push({ i: x.i, u: piece });
-      used += piece.length + 1;
+    const take = (i) => {
+      if (i < 0 || i >= units.length || chosen.has(i)) return true;
+      const len = units[i].length + 1;
+      if (used + len > cap) return false;
+      chosen.add(i); used += len;
+      return true;
+    };
+    for (const x of order) {
+      if (x.i > 0 && units[x.i - 1].length < 90 && !chosen.has(x.i - 1) && used + units[x.i - 1].length + units[x.i].length + 2 <= cap) take(x.i - 1); // a short line just before is its heading
+      take(x.i);
     }
-    return out.sort((a, b) => a.i - b.i).map((x) => x.u).join("\n");
+    for (const x of order.slice(0, 6)) take(x.i + 1); // spare room goes to what follows the best passages
+    const out = [];
+    let prev = -2;
+    for (const i of [...chosen].sort((a, b) => a - b)) { if (prev >= 0 && i > prev + 1) out.push("…"); out.push(units[i]); prev = i; }
+    return out.join("\n");
   }
   // Opens the chosen links in parallel and keeps what matters for the request. A page that is slow or refuses is marked
   // as failed instead of ending the whole answer. On the small on-device model each page is first distilled into notes
@@ -2267,7 +2388,7 @@
         const pg = await fetchReadable(r.url, signal);
         if (!pg.ok || !pg.text) throw new Error("unreadable");
         if (pg.title && (!r.title || r.title === hostOf(r.url) || r.title.length < 12)) r.title = pg.title.slice(0, 120);
-        r.full = pg.text; r.desc = pg.desc;
+        r.full = pg.text; r.desc = pg.desc; r.date = pg.date || "";
         chip?.done();
       } catch (e) {
         if (signal?.aborted) throw e; // only the user stopping ends the answer, never one slow page
@@ -2286,16 +2407,19 @@
         } catch (e) { if (signal?.aborted) throw e; }
       }
       if (!r.text) r.text = ((r.desc ? r.desc + "\n" : "") + focusText(r.full, o.query, o.cap)).slice(0, o.cap + (r.desc || "").length);
+      r.evidence = focusText(r.full, o.query, 3800);
       delete r.full;
     }
     return results;
   }
   const webBlock = (q, results, cap, linked) =>
-    (linked ? `=== PAGES OPENED FROM LINKS (${q}) ===\n` : `=== WEB SEARCH RESULTS for "${q}" ===\n`) +
-    results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n` + (r.failed
+    (linked ? `=== PAGES OPENED FROM LINKS (${q}) ===\n` : `=== WEB SEARCH RESULTS for "${q}" (today is ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}) ===\n`) +
+    results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n` + (r.date && fmtDay(r.date) ? `Published: ${fmtDay(r.date)}\n` : "") + (r.failed
       ? `(This page could not be opened. All that is known is the text around the link on the source page: ${(r.snippet || "none").slice(0, 200)})`
       : (r.text || r.snippet || "").slice(0, cap))).join("\n\n") +
-    "\n\nUse these results for facts beyond the page. Cite sources inline as [1], [2] right after the claims they support. Never cite a source that isn't listed. If a page could not be opened, say so instead of guessing what it contains. If these results don't actually answer the question, say what is missing and suggest a more specific follow-up instead of guessing.";
+    "\n\nUse these results for facts beyond the page. Cite sources inline as [1], [2] right after the claims they support, and never cite a source that isn't listed. Copy numbers, names and dates exactly as written. " +
+    "If the sources disagree, say so and say which source says what; for anything latest or current, go with the most recent date and mention when it was published. " +
+    "If a page could not be opened, say so instead of guessing what it contains. If these results don't actually answer the question, say what is missing and suggest a more specific follow-up instead of guessing.";
   // ----- higher effort on the small on-device model -----
   // Its 4,096-token window can't hold a long page, so High reads the whole page in parts and keeps notes that matter
   // for the question; Max also drafts an answer and then refines it.
@@ -2316,7 +2440,15 @@
   async function deepRead(question, text, signal, tick) {
     const size = 4200, cap = effort() >= 4 ? 12 : 7;
     let parts = splitForReading(text, size);
-    if (parts.length > cap) parts = Array.from({ length: cap }, (_, i) => parts[Math.round((i * (parts.length - 1)) / (cap - 1))]); // keep the start and end, sample the middle evenly
+    if (parts.length > cap) {
+      const q = [...new Set(ftokens(question))];
+      const general = /\b(?:summari[sz]e|summary|key takeaways?|key moments|tl;?dr|overview|main points|gist)\b/i.test(question);
+      const sc = q.length && !general ? bm25Scores(parts, q, question) : [];
+      if (sc.some((v) => v > 0)) { // the question names something specific: read the parts that talk about it, plus the opening
+        const keep = new Set([0, ...sc.map((v, i) => ({ v, i })).sort((a, b) => b.v - a.v).slice(0, cap - 1).map((x) => x.i)]);
+        parts = [...keep].sort((a, b) => a - b).map((i) => parts[i]);
+      } else parts = Array.from({ length: cap }, (_, i) => parts[Math.round((i * (parts.length - 1)) / (cap - 1))]); // a general request: keep the start and end, sample the middle evenly
+    }
     const notes = [];
     for (let i = 0; i < parts.length; i++) {
       tick?.(i + 1, parts.length);
@@ -2339,21 +2471,135 @@
     const cut = (t, n) => (t.length <= n ? t : t.slice(0, n - 1) + "…");
     const c = req.messages[0].content, i = c.lastIndexOf("=== REQUEST ===");
     const src = i > 0 ? c.slice(0, i).trim() : "", ask = i >= 0 ? c.slice(i + 15).trim() : c;
+    const codeFound = (t) => groundAnswer(t, req.evidence).unsupported.map((f) => `The draft says ${f.shown}, but that does not appear anywhere in the source.`).join("\n");
     try {
       setStatus("Drafting an answer…");
       let draft = (await askOnce(req.system, c, signal)).trim();
       if (!draft) return null;
       for (let r = 0; r < rounds; r++) {
         setStatus(r ? "Checking it again…" : "Checking the facts…");
-        const verdict = (await askOnce(CHECK_SYSTEM, `=== SOURCE ===\n${cut(src, 5000)}\n\n=== REQUEST ===\n${cut(ask, 300)}\n\n=== DRAFT ===\n${cut(draft, 1500)}`, signal, true)).trim();
-        if (!verdict || /^OK\b/i.test(verdict)) break;
+        const fromCode = codeFound(draft); // figures, dates and quotes matched against the full sources, in code
+        const said = (await askOnce(CHECK_SYSTEM, `=== SOURCE ===\n${cut(src, 5000)}\n\n=== REQUEST ===\n${cut(ask, 300)}\n\n=== DRAFT ===\n${cut(draft, 1500)}`, signal, true)).trim();
+        const verdict = [fromCode, said && !/^OK\b/i.test(said) ? said : ""].filter(Boolean).join("\n");
+        if (!verdict) break;
         setStatus("Correcting the answer…");
-        const fixed = (await askOnce(req.system, `${cut(src, 4800)}\n\n=== DRAFT ANSWER ===\n${cut(draft, 1500)}\n\n=== PROBLEMS FOUND IN THE DRAFT ===\n${cut(verdict, 500)}\n\n=== REQUEST ===\n${cut(ask, 400)}\n\n` +
-          "Rewrite the draft as the final answer. Fix or remove every problem listed, using only the source. Keep everything that was correct, keep the same friendly flowing paragraphs with no lists, and do not make it longer. Reply with only the answer.", signal)).trim();
+        const fixed = (await askOnce(req.system, `${cut(src, 4800)}\n\n=== DRAFT ANSWER ===\n${cut(draft, 1500)}\n\n=== PROBLEMS FOUND IN THE DRAFT ===\n${cut(verdict, 600)}\n\n=== REQUEST ===\n${cut(ask, 400)}\n\n` +
+          "Rewrite the draft as the final answer. Fix or remove every problem listed, using only the source; if a figure, date or quote can't be found in the source, leave it out instead of guessing. Keep everything that was correct, keep the same friendly flowing paragraphs with no lists, and do not make it longer. Reply with only the answer.", signal)).trim();
         if (fixed) draft = fixed;
       }
       return draft;
     } catch (e) { if (e.name === "AbortError" || signal?.aborted) throw e; return null; }
+  }
+  // ----- arithmetic and date maths, done exactly in code -----
+  // Small models get sums, percentages and "how many days until" wrong with total confidence, so when the question contains one the
+  // result is worked out here and handed over as a fact (it also counts as a source for the answer check).
+  function calcHints(text) {
+    const t = String(text || "");
+    const num = (x) => parseFloat(String(x).replace(/,/g, ""));
+    const fmt = (n) => n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+    const N = "\\d[\\d,]*(?:\\.\\d+)?", out = [];
+    for (const m of t.matchAll(new RegExp(`(${N})\\s*%\\s*of\\s*[$€£]?\\s*(${N})`, "gi"))) out.push(`${m[1]}% of ${m[2]} = ${fmt((num(m[1]) * num(m[2])) / 100)}`);
+    const pc = t.match(new RegExp(`(?:percent(?:age)?|%)\\s*(?:change|increase|decrease|difference|growth)\\s*(?:from|between)\\s*[$€£]?\\s*(${N})\\s*(?:to|and)\\s*[$€£]?\\s*(${N})`, "i"));
+    if (pc && num(pc[1])) { const a = num(pc[1]), b = num(pc[2]); out.push(`the change from ${pc[1]} to ${pc[2]} is ${fmt(((b - a) / a) * 100)}% (${b >= a ? "an increase" : "a decrease"} of ${fmt(Math.abs(b - a))})`); }
+    const operand = `[$€£]?\\(?${N}\\)?`, op = "(?:\\s*[+×÷*]\\s*|\\s+[-x/]\\s+)";
+    for (const m of t.matchAll(new RegExp(`(?<![\\w./-])${operand}(?:${op}${operand})+(?![\\w/-])`, "g"))) {
+      const expr = m[0].replace(/[$€£,]/g, "").replace(/×|\sx\s/g, " * ").replace(/÷/g, " / ");
+      if (!/^[\d\s.+\-*/()]+$/.test(expr)) continue;
+      if (/\b(?:pages?|pp?|sections?|chapters?|ch|figures?|fig|tables?|steps?|parts?|items?|lines?|vol|no)\.?\s*$/i.test(t.slice(Math.max(0, m.index - 12), m.index))) continue; // "page 3 - 4" is a range, not a sum
+      try {
+        const v = Function(`"use strict"; return (${expr})`)();
+        if (Number.isFinite(v) && !(v < 0 && !/\b(?:calculate|subtract|minus|what is|what's|how much|equals?)\b|=/i.test(t))) out.push(`${m[0].trim()} = ${fmt(v)}`);
+      } catch {}
+    }
+    if (/\b(?:how many|how long|number of)\s+(?:days|weeks)\b|\bdays?\s+(?:until|till|since|between|from)\b/i.test(t)) {
+      const MONS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+      const found = [];
+      for (const m of t.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) found.push({ at: m.index, y: +m[1], mo: +m[2] - 1, d: +m[3] });
+      for (const m of t.matchAll(new RegExp(`\\b(${MON})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b`, "gi"))) found.push({ at: m.index, y: m[3] ? +m[3] : 0, mo: MON_N(m[1]) - 1, d: +m[2] });
+      for (const m of t.matchAll(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${MON})\\.?(?:,?\\s+(\\d{4}))?\\b`, "gi"))) found.push({ at: m.index, y: m[3] ? +m[3] : 0, mo: MON_N(m[2]) - 1, d: +m[1] });
+      const dates = found.sort((a, b) => a.at - b.at).slice(0, 2);
+      const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const show = (d) => d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+      const days = (a, b) => Math.round((b - a) / 864e5);
+      const mk = (x, ref) => { let d = new Date(x.y || today.getFullYear(), x.mo, x.d); if (!x.y && /\b(?:until|till|to)\b/i.test(t) && d < today) d = new Date(today.getFullYear() + 1, x.mo, x.d); return d; };
+      if (dates.length) {
+        const a = dates.length === 2 ? mk(dates[0]) : today, b = dates.length === 2 ? mk(dates[1]) : mk(dates[0]);
+        const n = days(a, b), wk = (Math.abs(n) / 7).toLocaleString("en-US", { maximumFractionDigits: 1 });
+        out.push(dates.length === 2 ? `from ${show(a)} to ${show(b)} is ${Math.abs(n)} days (${wk} weeks)`
+          : `today is ${show(today)}; ${show(b)} ${n === 0 ? "is today" : n > 0 ? `is ${n} days away (${wk} weeks)` : `was ${-n} days ago (${wk} weeks)`}`);
+      }
+    }
+    return out.slice(0, 3).join("; ");
+  }
+  // ----- checking an answer against its sources in plain code (no model involved) -----
+  // Figures, dates and long quotes in the answer must really appear in the page or the sources. Citations like [2] are checked too:
+  // a sentence whose figures are only in source 3 gets [3], and a citation to a source that doesn't exist is dropped.
+  const MON = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
+  const MON_N = (w) => ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(w.slice(0, 3).toLowerCase()) + 1;
+  const NUM_RE = /(?<![\w.,])([$€£¥]\s?)?(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?\s?(%|percent|per cent|thousand|million|billion|trillion|bn|mm|k|m|b)?(?:st|nd|rd|th)?(?![\w])/gi;
+  const DATE_A = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${MON})\\b\\.?`, "gi");
+  const DATE_B = new RegExp(`\\b(${MON})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`, "gi");
+  const UNIT_X = { "%": 1, percent: 1, "per cent": 1, k: 1e3, thousand: 1e3, m: 1e6, mm: 1e6, million: 1e6, b: 1e9, bn: 1e9, billion: 1e9, trillion: 1e12 };
+  const numKey = (m) => String(Number((parseFloat(m[2].replace(/,/g, "") + (m[3] || "")) * (UNIT_X[(m[4] || "").toLowerCase()] || 1)).toPrecision(9)));
+  const normText = (t) => String(t).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  function indexSource(t) {
+    const nums = new Set(), dates = new Set();
+    for (const m of String(t).matchAll(NUM_RE)) nums.add(numKey(m));
+    for (const m of String(t).matchAll(DATE_A)) dates.add(MON_N(m[2]) + "-" + +m[1]);
+    for (const m of String(t).matchAll(DATE_B)) dates.add(MON_N(m[1]) + "-" + +m[2]);
+    for (const m of String(t).matchAll(/\b(?:19|20)\d\d-(\d\d)-(\d\d)\b/g)) dates.add(+m[1] + "-" + +m[2]);
+    return { nums, dates, norm: " " + normText(t) + " " };
+  }
+  const sourceHas = (ix, f) => (f.kind === "num" ? ix.nums.has(f.key) : f.kind === "date" ? ix.dates.has(f.key) : ix.norm.includes(" " + f.key + " "));
+  function factsOf(sentence) {
+    let t = sentence.replace(/\[\d{1,2}(?:\s*,\s*\d{1,2})*\]/g, " ").replace(/\[L\d+\]/g, " ");
+    const facts = [];
+    for (const m of t.matchAll(/[“"]([^”"\n]{12,240})[”"]/g)) {
+      for (const piece of m[1].split(/…|\.\.\./)) { const n = normText(piece); if (n.split(" ").length >= 3) facts.push({ kind: "quote", key: n, shown: "“" + piece.trim().slice(0, 60).replace(/\*/g, "") + "”" }); }
+    }
+    t = t.replace(/[“"]([^”"\n]{12,240})[”"]/g, " "); // a quote is checked as a whole, not again figure by figure
+    for (const re of [DATE_B, DATE_A].reverse()) {
+      t = t.replace(re, (all, a, b) => { const mon = re === DATE_A ? b : a, day = re === DATE_A ? a : b; facts.push({ kind: "date", key: MON_N(mon) + "-" + +day, shown: all.trim() }); return " "; });
+    }
+    for (const m of t.matchAll(NUM_RE)) {
+      const plain = !m[1] && !m[3] && !m[4] && m[2].replace(/,/g, "").length < 2; // a lone digit ("3 reasons") is not a figure
+      if (!plain) facts.push({ kind: "num", key: numKey(m), shown: m[0].trim() });
+    }
+    return facts;
+  }
+  function groundAnswer(text, ev) {
+    if (!ev) return { text, unsupported: [] };
+    const base = indexSource(ev.base + "\n" + new Date().getFullYear());
+    const per = (ev.sources || []).map(indexSource);
+    const anywhere = (f) => sourceHas(base, f) || per.some((p) => sourceHas(p, f));
+    const unsupported = [];
+    const parts = text.split(/(?<=[.!?])(\s+)/);
+    for (let k = 0; k < parts.length; k += 2) {
+      let sent = parts[k];
+      if (!sent) continue;
+      if (/\[\d{1,2}\]/.test(sent)) { // a citation to a source that doesn't exist is dropped
+        const fixed = sent.replace(/\s?\[(\d{1,2})\]/g, (m, n) => (+n >= 1 && +n <= per.length ? m : "")).replace(/\s+([.,;:!?])/g, "$1");
+        if (fixed !== sent) sent = fixed;
+      }
+      const facts = factsOf(sent);
+      if (facts.length) {
+        const cited = [...new Set([...sent.matchAll(/\[(\d{1,2})\]/g)].map((m) => +m[1]))];
+        const miss = cited.length ? facts.filter((f) => !cited.some((n) => sourceHas(per[n - 1], f))) : facts.filter((f) => !anywhere(f));
+        if (cited.length && miss.length) {
+          const alt = per.findIndex((p, i) => !cited.includes(i + 1) && miss.every((f) => sourceHas(p, f)));
+          if (alt >= 0 && cited.length === 1) sent = sent.replace(`[${cited[0]}]`, `[${alt + 1}]`); // right fact, wrong source number
+          else unsupported.push(...miss.filter((f) => !anywhere(f)));
+        } else unsupported.push(...miss);
+      }
+      parts[k] = sent;
+    }
+    let out = parts.join("");
+    const shown = [...new Set(unsupported.map((f) => f.shown))].slice(0, 3);
+    if (shown.length && !/Heads-up: I couldn't find/.test(out)) {
+      const list = shown.length > 1 ? shown.slice(0, -1).join(", ") + " or " + shown.at(-1) : shown[0];
+      out += `\n\n*Heads-up: I couldn't find ${list} in the page or the sources I read, so treat ${shown.length > 1 ? "those" : "that"} as unverified.*`;
+    }
+    return { text: out, unsupported };
   }
   // hands an already-written answer to the chat a few words at a time, so it reads like the normal stream
   async function* replayText(text, signal) {
@@ -3600,19 +3846,26 @@
       const pageBlock = includePage ? `=== PAGE THE USER IS VIEWING ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${ctx}${linkTxt}` : linkTxt.trim();
       if (apple) {
         const upto = resuming ? convo : convo.slice(0, convo.lastIndexOf(lastU));
-        const transcript = upto.slice(-2).map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${(m.label || m.content).slice(0, 500)}`).join("\n");
+        // the last four messages (previous answers matter for "what about the second one?"), trimmed to fit, newest kept
+        const tcap = webCtx ? 1000 : 1600;
+        const tfull = upto.slice(-4).map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${(m.label || m.content).slice(0, m.role === "user" ? 300 : 700)}`).join("\n");
+        const transcript = tfull.length <= tcap ? tfull : "…" + tfull.slice(-tcap);
         const fit = (text, limit) => text.length <= limit ? text : text.slice(0, limit - 44) + "\n[…context shortened for the on-device model]";
         const budget = webCtx ? 2200 : 4200;
         const body = deep ? `=== PAGE THE USER IS VIEWING (notes from reading all of it) ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${deep}` : `=== PAGE THE USER IS VIEWING ===\nTitle: ${page.title}\nURL: ${page.url}\n\n${ctx}`;
         const pageContext = includePage ? fit(body, Math.max(900, budget - linkTxt.length)) + linkTxt : linkTxt.trim();
-        const webContext = webCtx ? fit(webCtx.text, 2600) : "";
+        const webContext = webCtx ? fit(webCtx.text, 3000) : "";
         const ask = resuming ? "Continue your previous answer exactly where it stopped, without repeating it." : userText(lastU || { content: req }, true);
+        const calc = resuming ? "" : calcHints(req);
         return {
           system: systemPrompt() + leadNote + (lastU?.web ? "" : noWebNote), pageBlock: "", web: false,
+          // everything the answer may legitimately draw on, kept whole (not cut to the window) so the answer can be checked against it
+          evidence: ((includePage && !page.none && page.text) || deep || webCtx?.sources?.length) ? { base: [includePage && !page.none ? page.text : "", deep || "", linkTxt, ask, transcript, calc].join("\n"), sources: webCtx?.sources || [] } : null,
           messages: [{ role: "user", content:
             (pageContext ? (includePage ? "Use the web page below to respond to the user's request." + (effort() <= 1 ? " Be concise." : "") + "\n\n" : "") + pageContext + "\n\n" : "") +
             (webContext ? webContext + "\n\n" : "") +
             (transcript ? `=== CONVERSATION SO FAR ===\n${transcript}\n\n` : "") + `=== REQUEST ===\n${ask}` +
+            (calc ? `\n\n(Worked out exactly in code, so use these results as they are: ${calc})` : "") +
             (!resuming && effort() >= 2 && (pageContext || webContext) ? "\n\n(Any facts you state about the page or sources must come only from the material above: copy names and numbers exactly, and say so if something isn't covered.)" : "") }],
         };
       }
@@ -3940,7 +4193,7 @@
           const runFallback = async () => {
             if (skipRouter) return;
             const apple = provider() === "apple";
-            const cap = apple ? 1100 : 3500;
+            const cap = apple ? (effort() >= 2 ? 1100 : 780) : 3500;
             const pageLinks = searchPage?.links || [];
             try {
               let picks = [], query = "", alt = "", say = "";
@@ -3979,7 +4232,7 @@
                 const ok = results.filter((r) => !r.failed).length;
                 step.done(ok === results.length ? (ok === 1 ? `Read ${hostOf(results[0].url) || "the page"}` : `Read ${ok} linked pages`) : `Read ${ok} of ${results.length} linked pages`);
                 const from = searchPage?.title || "the current page";
-                webCtx = { text: webBlock("from " + from, results, cap, true) };
+                webCtx = { text: webBlock("from " + from, results, cap, true), sources: sourceTexts(results) };
                 searchInfo = { query: "Links from " + from, sources: results.map((r) => ({ title: r.title, url: r.url })) };
                 cites = searchInfo.sources;
               } else if (query) {
@@ -3991,9 +4244,32 @@
                 const s2 = flow.begin("Reading the top results", { kind: "read", ico: "globe", pill: "Searching the web" });
                 const chips = results.slice(0, 3).map((r) => s2.chip({ url: r.url, label: hostOf(r.url) || r.title }));
                 await readSources(results, signal, cap, query, chips);
-                s2.done(`Read ${results.filter((r) => r.text).length} results`);
-                webCtx = { text: webBlock(found.queries.join('" and "'), results, cap) };
-                searchInfo = { query: found.queries.join(" · "), sources: results.map((r) => ({ title: r.title, url: r.url })) };
+                // do the pages read actually talk about what was asked? if not, read the next results, then try one more wording
+                const thin = (c) => c.union < 0.7 || c.best < 0.5;
+                let cov = evidenceCoverage(results, query);
+                if (thin(cov)) {
+                  s2.set("Those pages don't cover it, reading more");
+                  const more = results.filter((r) => !r.tried).slice(0, 3);
+                  if (more.length) await readSources(more, signal, cap, query);
+                  cov = evidenceCoverage(results, query);
+                  if (thin(cov)) {
+                    const q3 = fallbackQuery(askText, searchPage);
+                    if (q3 && !found.queries.some((x) => sameQuery(x, q3))) {
+                      try {
+                        s2.set(`Trying another search: “${q3}”`);
+                        const again = await smartSearch(q3, "", signal, askText);
+                        const have = new Set(results.map((r) => normUrl(r.url)));
+                        const fresh = again.results.filter((r) => !have.has(normUrl(r.url))).slice(0, 3);
+                        if (fresh.length) { await readSources(fresh, signal, cap, q3 + " " + query); results.push(...fresh); found.queries.push(q3); }
+                      } catch (e) { if (signal.aborted) throw e; }
+                    }
+                  }
+                }
+                const used = chooseSources(results, query, askText, apple ? 3 : 5);
+                if (apple && effort() >= 2) await noteSources(used, askText, signal, s2);
+                s2.done(`Read ${used.filter((r) => r.evidence).length} results`);
+                webCtx = { text: webBlock(found.queries.join('" and "'), used, cap), sources: sourceTexts(used) };
+                searchInfo = { query: found.queries.join(" · "), sources: used.map((r) => ({ title: r.title, url: r.url })) };
                 cites = searchInfo.sources;
               }
             } catch (e) {
@@ -4023,9 +4299,11 @@
             ds.done();
           }
           const setStatus = (t) => flow.begin(t, { kind: "refine", done: /^Draft/.test(t) ? "Drafted an answer" : /^Correct/.test(t) ? "Corrected the answer" : "Checked the facts" });
+          let evidenceNow = null; // what this answer can be checked against (small model only)
           for (let attempt = 0; ; attempt++) {
             try {
               let reqNow = buildRequest(!!prior, webCtx, deep, lead, queryHint);
+              evidenceNow = reqNow.evidence || null;
               if (provider() === "apple" && effort() >= 3 && !prior) { // High: draft, fact-check, fix. Max: check twice.
                 const final = await verifiedAnswer(reqNow, signal, setStatus, effort() >= 4 ? 2 : 1);
                 if (flow.active?.state === "active") flow.active.done();
@@ -4074,6 +4352,10 @@
           }
           clearTimeout(paintTimer); paintTimer = null;
           endThink();
+          if (evidenceNow && effort() >= 2 && !prior && acc.length > segStart) { // figures, dates and quotes must be in the sources; citations are checked
+            const seg = acc.slice(segStart), g = groundAnswer(seg, evidenceNow);
+            if (g.text !== seg) acc = acc.slice(0, segStart) + g.text;
+          }
           paint();
           const lastSeg = view(clean(acc.slice(segStart)));
           acc = acc.slice(0, segStart) + lastSeg;

@@ -1,264 +1,83 @@
-# Dia Sidebar (Sine mod for Zen)
+# Dia Sidebar
 
-A Dia-style AI chat sidebar for Zen, loaded as a userChrome.js mod via Sine. It is a **real sidebar**: it sits next to the
-page inside Zen's own layout, so the page gets narrower (nothing floats over it). It always sits on the **opposite side from
-your tab sidebar** and follows it if you move your tabs to the other side. It stays visible in normal fullscreen (F11 /
-macOS) and only hides when a page itself goes fullscreen, such as a video.
+A Dia-style AI chat sidebar for the Zen browser, installed as a Sine mod. Press **⌘E** (Ctrl+E on Windows/Linux) on any web page and chat about it, with the page sitting right next to the chat.
 
-It looks like Dia's sidebar: a bare header (new chat and the **model picker** on the left, a menu and close on the right), a
-blank empty chat, and one big rounded composer with your context cards, the box, and a bottom row with **+**, a **tabs**
-button, a **globe** to force web search, a **camera** and a round send button. It has no paint of its own: like Zen's tab sidebar it is
-transparent over your space's background, so it is exactly the colour of the space (gradient and all) and follows each space
-and Zen's light/dark setting. (The *Neutral* colour option, and the floating fallback that overlays a page, use a solid panel.)
+It works with Apple Intelligence (runs on your Mac, no API key), Gemini, Claude, OpenAI, DeepSeek, Ollama, or any OpenAI-compatible model.
 
-## What it is doing, always on screen
+## What it does
 
-Whenever the model is working there is always something alive in the chat, in the same compact style as Dia:
+- **Chats about the page you're on.** Summaries, questions, explanations, fact-checks. YouTube videos are summarised automatically, with clickable timestamps.
+- **Add more context.** Other tabs, tab groups, links on the page, selected text, screenshots, and dropped files (PDF, Word, Excel, PowerPoint, text, images).
+- **Web search only when you ask.** Turn on the globe button and it searches the web, reads the best pages and answers with numbered sources. With the globe off it never goes online.
+- **Follows links.** Say "open the second source" or paste a link that's on the page.
+- **Shows its work.** A small activity line shows what it's doing (reading, searching, thinking), and you can expand it to see every page it opened.
+- **Checks itself.** On Apple Intelligence it checks figures, dates and quotes against the page and sources, and flags anything it can't find.
+- **Skills and mentions.** Saved prompts with `/`, and `@` to mention tabs or shape the answer (`@list`, `@steps`, `@table`).
+- **Looks native.** It sits on the opposite side from your tab sidebar, matches your Zen space colours, and keeps history on your computer (optional).
 
-- **One small pill for what it is doing right now**: *Reading 1 attachment*, *Searching the web* (with the favicons of the
-  pages it opens stacked on the left), *Reading links*, or three blue dots while it thinks. The running text has a light sweep
-  across it, and after a few seconds the pill shows how long it has been going, so a slow on-device model never looks frozen.
-- **A finished step settles into a muted line** ("Read 1 attachment", "Searched the web · 7.1s").
-- **Minimised by default, maximise on demand.** Click the pill or the muted line to open the full list of steps (every page
-  it opened, with ✓ / ✗ per page, and the timings). Click again to minimise it.
-- A thin light sweeps under the header and the send button wears a spinning ring while anything is running.
-- The answer fades in a few words at a time and never shows half-finished `**bold**`, `code` or links.
-- A tab or link you just added shows a card with a spinner and a "Reading…" line until its text is in.
+## Install
 
-With *Reduce motion* on, the sweeps and spinners stay still.
+1. Put the files at the root of a public GitHub repo and set `homepage` in `theme.json` to its URL.
+2. In Zen: Settings → Sine → turn on **Enable installing JS from unofficial sources**. (Without this, Sine skips the script and nothing appears.)
+3. Install the mod from the repo URL in Sine, make sure it's enabled, and restart Zen.
+4. Disable the old *Page Summary* mod if you have it. Both use ⌘E.
 
-## How it answers
+The script must be named `dia-sidebar.uc.js`. On first open, a short guide helps you pick a model.
 
-Like a chat, not a report:
+## Using Apple Intelligence with AFM Server
 
-- **It answers as it goes.** When a question needs more than the page (a link on it, or, with the globe on, the web), it first says what the page does or doesn't tell you
-  and that it is looking further (*"This page doesn't list a phone number, so I'm checking whether The Gym Group has one."*),
-  then shows the research pill, then carries on with the rest of the answer underneath.
-- **Apple Intelligence talks like a normal chatbot**: friendly, flowing paragraphs, no bullet lists, headings or tables unless
-  you ask for a list, steps or a table (or use `@list` / `@steps`). The built-in *Summarize* and *Key takeaways* prompts ask for
-  a friendly summary instead of bullets. The Effort slider sets how much it says (see below).
-- Other models keep their concise, structured style.
+Apple Intelligence runs on your Mac through **AFM Server**, a small menu bar app that lets other apps talk to Apple's on-device model. The mod is already set up for its default address, so you mostly just install it and leave it running.
 
-## Opening it
+**You need:** a Mac with Apple Silicon, macOS 26 (Tahoe) or later, and Apple Intelligence turned on and finished downloading (System Settings → Apple Intelligence & Siri).
 
-Press **⌘E** (macOS) / **Ctrl+E**, or use the chat icon in the URL bar (it appears when you hover the URL bar, next to the
-bookmark star). **It only opens on a real web page.** On a new tab, a blank tab or a browser page (about:…), the shortcut does
-nothing and the URL bar icon is dimmed. If you navigate a tab with the sidebar open to one of those, the sidebar hides and comes
-back when the tab is on a page again. Each tab keeps its own chat while the sidebar is hidden.
+**Set up**
 
-> Forked from *Page Summary*. Both mods use ⌘E, so disable Page Summary before enabling this one.
+1. Download the latest `afm-server` zip from the project's Releases page (github.com/Techopolis/afm-server/releases), unzip it, move `afm-server.app` to Applications and open it.
+2. A lightning bolt appears in the menu bar. Green means the server is running. It starts by itself on port 11435.
+3. In Zen, open the sidebar on a web page and pick **Apple Intelligence** from the model menu. Nothing else to configure.
 
-## Setup guide
+**Keep it working**
 
-The first time you open the sidebar, a short guide helps you pick a model and set the effort.
-After you save a model, setup lets you continue or optionally add another; adding more models is never required.
-To see it again, tick **Setup → Run the setup guide again** in the mod's Sine settings. **That removes any models you added**
-(Apple Intelligence stays) and shows the guide the next time the sidebar is open. If a page is already open, it shows at once.
+- **Leave AFM Server running.** If it's closed, the sidebar says it couldn't reach Apple Intelligence. To start it automatically, add it in System Settings → General → Login Items & Extensions.
+- **Quick test:** in Terminal, `curl http://127.0.0.1:11435/debug/health` should answer with `"status": "ok"`.
+- **Changed the port?** Set the same port in the mod: Settings → Advanced (tick *Show advanced options*) → **AFM Server address**, for example `http://127.0.0.1:12000/v1`.
+- **AFM Server asks for an API key?** Paste it into **AFM Server API key** in the same place. If it doesn't, leave that blank.
+- **Leave AFM Server's own System Prompt setting empty or at its default** (⌘, in the app). The mod sends its own instructions with every message, and a second set may compete with them. If answers feel off, check it.
 
-## Models
+**Getting the best answers**
 
-The pill at the top left shows the model in use. Click it to switch. The model applies to your next message, in every chat and
-window. **Add or manage models…** opens a sheet to add as many as you like:
+- Apple's on-device model has a small memory (about 4,096 tokens), so the mod works in several steps instead of one big one. That's what the **Effort** slider (model menu) controls. **Low** is quick. **Medium** is one careful pass. **High** reads long pages in parts, drafts an answer, then fact-checks it. **Max** checks twice. Higher effort is slower but more accurate, and it doesn't make answers longer.
+- Press the **globe** for anything about the outside world or recent events. The model's own knowledge is limited, and it never searches the web unless the globe is on.
+- It reads text only. It can't look at images, and a PDF has to have real text in it.
+- Apple's safety rules can refuse some questions. Rephrase and try again.
+- AFM Server handles about three requests at a time by default and queues the rest, so many chats at once will feel slower.
 
-- **Apple Intelligence** (built in): runs on your Mac through AFM Server with the model `apple.local`. The default address is
-  `http://127.0.0.1:11435/v1`. If you changed it, or turned on key protection, set the address and key under
-  **Advanced** in the mod's settings.
-- **Google Gemini**: sign in to Google AI Studio with your existing Google account, create an API key (the form has a button
-  that opens it), and choose Flash (fast), Pro (smartest) or Flash-Lite (cheapest). The newest model of that kind is picked
-  for you automatically. **Check key** verifies the key and lists the models it can use if you would rather pick an exact one.
-  Gemini reads images and PDFs, and uses Google Search by itself when a question needs it.
-- **Claude**: paste an Anthropic API key, then **Find models** lists the Claude models enabled for that key.
-- **OpenAI · ChatGPT API**: paste an OpenAI platform API key and choose a model from its list. A ChatGPT subscription does
-  not automatically include API usage; API billing is handled separately.
-- **DeepSeek**: the current DeepSeek Flash model is prefilled, and **Find models** lists anything else enabled for your key.
-- **Ollama**: starts with its local API address and lists models already installed on your Mac. No cloud key is needed.
-- **Other compatible model** (LM Studio, OpenRouter, or another OpenAI-compatible server): provide the server address, model
-  ID and optional key. **Find models** asks the server what it offers. *Small context window*, *Can read images*, and
-  *Reasoning model* describe optional model capabilities.
+**If something's wrong**
 
-Models you add are stored in `dia-sidebar-models.json` in your Firefox profile folder. API keys are plain text there.
-Text-only models never receive image attachments.
+| Problem | Likely fix |
+|---|---|
+| "Couldn't reach Apple Intelligence" | Open AFM Server and check the bolt is green, and that the port matches the mod's address. |
+| Empty or generic replies | Apple Intelligence isn't on, or is still downloading. Check System Settings. |
+| Port already in use | Change the port in AFM Server's menu bar controls, then update the address in the mod. |
 
-## Effort
+## Other models
 
-The **Effort slider** is in the model menu: Low, Medium, High, Max. It sets how much work the model puts into an answer, and
-what that means depends on the model:
+Click the model name at the top left of the sidebar, then **Add or manage models…**. Gemini, Claude, OpenAI and DeepSeek need an API key. Ollama and other local servers need only their address. Keys are stored as plain text in `dia-sidebar-models.json` in your Firefox profile, never in this repo.
 
-| | Low | Medium | High | Max |
-|---|---|---|---|---|
-| **Answer style** | brief | balanced | thorough | thorough, checked against the sources |
-| **Apple Intelligence: what you read** | a sentence or two | as long as the question needs (a sentence or two for a simple one, a few short paragraphs for a bigger one) | the same length as Medium, but fact-checked | the same length again, checked twice |
-| **Apple Intelligence: how it works** | one quick pass | one careful pass, takes notes on linked pages | reads long pages in parts, drafts an answer, **fact-checks it claim by claim against the page**, and corrects it only if something is wrong | the same, with a second fact-check |
-| **Gemini** | light thinking | light thinking | more thinking | longest thinking |
-| **Reasoning models** | `reasoning_effort` low | medium | high | high |
+## Settings
 
-Apple's on-device model only has a 4,096-token window, so higher effort works by doing more passes instead of cramming more
-into one. It is slower but gives far better answers on long pages. Short pages never need the extra reading. The quick
-background calls (like deciding whether to search) always stay at low effort.
-
-On Apple Intelligence, effort buys accuracy, not length: from Medium up the answer is the same length and only the amount of checking
-changes. The corrective rewrite is not allowed to add anything or get longer. The model also runs at a low temperature (0 for the
-helper calls, 0.2 for the answer) so it sticks to the page instead of improvising, and its prompt tells it to copy names, numbers
-and dates exactly and to say what the page doesn't cover.
-
-Effort is a slider in the sidebar because Sine's settings page has no slider control.
-
-## Links on the page
-
-The sidebar understands the links on the page you are on, not just the page text. For each link it keeps the link text, the
-sentence or row around it, the heading it sits under, and whether it is a reference, an outbound link, an in-site link or just
-site navigation. Tracking parameters and redirect wrappers (Google, Facebook, Reddit) are stripped, share and login buttons
-are ignored, and listing pages (search results, forums, link roundups) work as well as articles.
-
-- **Say what you mean.** "What does the second source say?", "open the last reference", "read link 3", "summarize the
-  sources", "check the arxiv paper", or paste a URL. Explicit URLs and "the third link" are resolved directly; names and
-  keywords are matched locally.
-- **Only links that are on the page.** Without the globe, these are the only things it can open.
-- **The small model only chooses between a short list.** Apple Intelligence is shown up to 12 locally ranked candidates with
-  a bit of context, never the whole page's links, and picks up to three. If it picks none, the best local matches are used.
-- **Only what matters is kept.** Each opened page is cut down to the passages that answer your question (not just its first
-  few hundred characters). On Apple Intelligence (Medium and up), each page is first distilled into short notes about your
-  question. PDFs are read too.
-- **A slow or broken link no longer breaks the answer.** It is marked ✗ in the activity list and the model is told it
-  couldn't be opened, so it says so instead of guessing.
-- **Pointing at links.** The model sees the page's links labelled L1, L2… (the most relevant to your question first) and
-  refers to them as `[L3]`, which the sidebar turns into a real clickable link. It never types URLs itself. The link list
-  stays available on follow-up questions for as long as the page is in the chat.
-- **Add links as context yourself.** In the tab picker (below), switch to **Links**, or type `@` plus a few words of a link's
-  text.
-
-## Context: tabs, links, files
-
-Add context from the **tabs button** (next to **+**), **+ → Add tabs & links…**, `@`, or by dragging.
-
-**The picker** is one panel that stays open while you tick things, so adding five tabs is five taps:
-
-- **Tabs**: every open web tab, including sleeping ones (those are fetched in the background). Sorted by recency and grouped
-  as *In this group / This space / Other spaces*. Tab groups appear as chips that add the whole group in one tap.
-- **Links**: the links on the page you are viewing, grouped as *In the page / References / Site menu*, each with its
-  surrounding sentence.
-- Search box (always focused), **↑ ↓** to move, **Enter** or **Space** to tick, **Add all**, **Clear**, **Esc** to close.
-- Cards appear instantly with a spinner. If you press send while one is still reading, the message goes out the moment it
-  is ready.
-
-You can also drop onto the sidebar (a "Drop to add as context" overlay appears):
-
-- **Tabs**: drag a tab from Zen's tab list. Drop several at once, or a whole **tab group / folder**. PDFs open in a tab are
-  read as PDFs.
-- **Files**: images (PNG, JPEG, GIF, WebP), **PDFs**, **Word / Excel / PowerPoint** (.docx .xlsx .pptx), and text or code files.
-  Paste images straight into the box too.
-- **Selected text**: select text on the page and it appears as a Selection card, or right-click → *Ask Chat about selection*.
-
-The current page starts as a context card above the chat box. Hover it and a small round **minimise (−)** button appears on its
-corner, where other cards have an ✕: minimising leaves the page out of the first message (the card greys out and the button
-becomes **+** to put it back). After that first message, it becomes a normal removable tab card (with the ✕) for later messages. The
-**camera** attaches a screenshot as a *Capture* card (only models marked *Can read images* look at it). Up to 12 cards at a time.
-
-## Web search: only with the globe
-
-**The assistant never goes online on its own.** The internet is only searched when the **globe** button is on (or you use
-**@Web**). The globe stays on for the chat until you turn it off, and it resets when you start a new chat.
-
-- **Globe off (the default):** it works only from the page you are on, anything you attached, and **the links on that
-  already-loaded page**. It can open those links to read them (see *Links on the page*), but nothing else. If you paste an
-  address that isn't a link on the page, it says so instead of opening it. If the answer isn't available, it says that
-  plainly and tells you to press the globe.
-- **Globe on:**
-  - **Gemini** uses Google Search directly, and **Claude** uses its built-in web search.
-  - **Other models** (including Apple Intelligence) make one quick call to decide what to search, then the mod searches with
-    DuckDuckGo by default, reads up to three pages (the passages that match your question) and answers with clickable
-    **[1] [2]** citations. Works with Apple Intelligence through AFM Server. In Settings you can choose Google Search, Brave
-    Search or a SearXNG instance; available providers are tried as fallbacks if the selected one is unavailable or rate-limited.
-  - **Better queries (v2.7):** the model is told to write a specific query (real names instead of "it", version numbers, the year
-    for "latest", the exact fact wanted, no filler) using the page title and recent chat. The query is tidied, and if the results
-    don't match the question a second wording is tried. Results are merged, re-ranked by relevance (max two per site) and any
-    page that can't be opened is replaced by the next result. Gemini and Claude get the same guidance and are told to search
-    again with different wording if the first results are off-target.
-  - **Context-aware queries (v2.8):** with the globe on, a dedicated step writes the search query from the whole conversation
-    (earlier questions, the answers already given, the page you're on) instead of using your last message as typed, so follow-ups
-    like "what about the second one?" search for the right thing. Gemini and Claude get that query handed to them too.
-  - **Own queries for every model (v2.8):** Gemini and Claude no longer pick their own search terms by default (they tended to search
-    your message as typed). The assistant writes the query, searches, reads the pages and answers from them. A query that still
-    says "this"/"it" is anchored to the page's subject. To go back to their built-in search, set *How the assistant searches* in
-    Settings.
-  - **Web search indicator (v2.8):** a "Web search is on" line stays above the text box for as long as the globe is on (click it to
-    turn it off). When you turn it off, "Web search is off" shows for a few seconds.
-
-Google Search reads the browser's Google results page, spaces requests out, and can use the existing browser session when
-available. Google may still show a CAPTCHA or rate-limit the request; the mod then tries another configured provider. This is
-page scraping, not Google-account authentication or a Google Search API. Google's Custom Search JSON API is closed to new
-customers and is scheduled to end for existing customers on January 1, 2027.
-
-Brave Search needs an API key and SearXNG needs an instance address. Google Search and DuckDuckGo need no extra setup. Fetched
-page text is not saved to history.
-
-Gemini API limits are set by Google per project and model. The sidebar retries temporary 429s and, when using the automatic
-Flash choice, tries another offered Flash model and then Flash-Lite. If the project quota is zero or exhausted, open
-**Check Gemini limits** in the error message; the sidebar cannot override Google's project limits.
-
-## Chat
-
-- **/ Skills**: saved prompts. Built in: Summarize, Key takeaways, Explain simply, Action items, Flashcards, Fact-check,
-  Proofread, Translate. Make your own (＋ New skill; *Write it for me* drafts one from a sentence).
-- **@ mentions**: open tabs, matching links on the page, tab groups, **@list / @table / @code / @email / @tldr / @steps** to
-  shape the answer, **@Web** and **@Tabs** (ask to close, group or open tabs; you review the proposal and press Apply).
-- **Stop & Resume**, **Regenerate**, **Copy**, **Edit** your messages or the model's answers. Type while an answer is streaming
-  and your message is queued.
-- The **header menu** (top right) has **Chat history** (search, restore, delete; stored in `dia-sidebar-chats.json`, turn it off
-  in settings) and **Skills**. Both open as full-size, scrollable sheets.
-- **YouTube**: reads the transcript and summarizes automatically on videos, with clickable **[mm:ss]** key moments.
-- Markdown with tables, code blocks (Copy buttons), nested lists and favicon links.
-- Drag the sidebar's inner edge to resize; double-click the edge to reset. Opened over a **split view**, every pane is attached.
-
-## Settings (Sine → this mod → settings)
-
-Short on purpose; model and effort live in the sidebar.
-
-- **Chat**: automatic summaries, Enter-to-send, and which search provider the globe uses.
-- **Context**: attach the current page, attach selected text.
-- **Appearance**: match your Zen space or neutral colours, text size, URL bar button.
-- **Privacy**: save chat history.
-- **Setup**: run the setup guide again.
-- **Advanced** (tick *Show advanced options*): AFM Server address and key.
-
-Settings from earlier versions that no longer exist (answer length, sidebar side, YouTube timestamps, the Automatic / Only when
-I ask / Off web search setting) are ignored: answer length is now the Effort slider, the side follows your tab sidebar, and web
-search is simply controlled by the globe.
-
-## Not included
-
-Connected apps (Gmail, Calendar, Slack…), voice dictation, HEIC images, memory, and anything that needs Dia's own backend. Old
-`.doc` / `.xls` / `.ppt` files aren't read, only the modern formats. Local `file://` pages and Reader View are not treated as
-pages yet. Pages that need you to be signed in can't be opened from a *link* (links are fetched without your cookies); open them
-in a tab instead and add the tab.
-
-## Install (Sine)
-
-Sine installs mods from a GitHub repo, and only runs a mod's JavaScript if you allow it:
-
-1. Put these files at the root of a public GitHub repo and set `homepage` in `theme.json` to its URL.
-2. Zen Settings → Sine → turn on **Enable installing JS from unofficial sources**. Without it, Sine loads a mod's CSS but
-   silently skips its script, so nothing appears.
-3. In Sine, install from the repo URL, make sure the mod is enabled, then restart Zen.
-4. Disable or uninstall the old Page Summary mod (both use ⌘E).
-
-**Updating an install that uses another script filename?** Sine stores each mod's script filename when it is installed
-(`chrome/sine-mods/mods.json`), so a script with a different name is never loaded. The script must be named
-`dia-sidebar.uc.js` (with a dot, not an underscore). Reinstall from the repo, or save the new script over the old one under
-its original name and restart.
+Sine → this mod → settings. Automatic summaries, Enter-to-send, search provider (DuckDuckGo, Google, Brave or SearXNG), what to attach, colours and text size, saving history, and the AFM Server address and key under Advanced. Model and effort are in the sidebar's model menu.
 
 ## If nothing appears
 
-1. The sidebar only opens on a web page. On a new tab the URL bar icon is dimmed on purpose. Open a site first.
-2. Hover the URL bar: the chat icon appears on hover. No icon at all means the script isn't running: check the two Sine steps above.
-3. Open the Browser Console (⌘⇧J / Ctrl+Shift+J) and search for `dia-sidebar`. You should see `[dia-sidebar] loaded v2.9.0`. A
-   wrong script filename shows up as `[Sine]: Failed to load script`. If clicking the icon does nothing on a page, look for
-   `[dia-sidebar] couldn't open the sidebar` and the error under it.
+1. It only opens on a real web page. On a new tab the URL bar icon is dimmed on purpose.
+2. No chat icon when you hover the URL bar means the script isn't running. Recheck the Sine steps above.
+3. Open the Browser Console (⌘⇧J) and search for `dia-sidebar`. You should see `loaded`. `Failed to load script` means the script has the wrong filename.
 
-## Notes
+## Not included
 
-- Files: `dia-sidebar.uc.js` (logic + styles), `theme.json`, `preferences.json`, `chrome.css` (toolbar icon fallback).
-- The chat icon is Ionicons' "chatbubble-ellipses" (MIT), the same glyph Zen uses for its own chat icon.
-- Model API keys are stored as plain text in `dia-sidebar-models.json` in your Firefox profile, not in this repo. A Brave
-  Search API key is stored in Firefox preferences. Search queries go to the selected provider, then Google/DuckDuckGo and any
-  configured Brave or SearXNG fallback.
+Connected apps (Gmail, Calendar, Slack), voice dictation, HEIC images and memory. Old `.doc`, `.xls` and `.ppt` files aren't read, only the modern formats. Pages that need you signed in can't be opened from a link, so open them in a tab and add the tab.
+
+## Files
+
+`dia-sidebar.uc.js` (everything), `theme.json`, `preferences.json`, `chrome.css`. The chat icon is Ionicons' "chatbubble-ellipses" (MIT).
