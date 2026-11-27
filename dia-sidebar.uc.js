@@ -14,7 +14,7 @@
   const SEL_MSG = "dia-sidebar:selection";
   const MAX_CHARS = 24000;
   const MAX_REFS = 12;
-  const VERSION = "2.12.0";
+  const VERSION = "2.14.0";
   const DEFAULT_PROMPT = "Summarize this page into concise bullet points.";
   const SYSTEM =
     "You are an AI assistant living in a sidebar next to the web page the user is viewing. " +
@@ -535,20 +535,109 @@
   .dia-eff-range { display: block; width: 100%; margin: 0; padding: 0; accent-color: var(--accent); cursor: pointer; }
   .dia-eff-ticks { display: flex; justify-content: space-between; margin-top: 3px; font-size: 11px; color: var(--mute); }
   .dia-eff-hint { margin-top: 6px; min-height: 2.8em; font-size: 12px; line-height: 1.4; color: var(--mute); }
-  .dia-onb { gap: 12px; }
-  .dia-onb-hero { margin: 4px 2px 0; font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
+  /* ---- setup guide: soft colour aura, big friendly type, pill buttons, steps that slide in ---- */
+  .dia-onb-sheet { isolation: isolate; }
+  .dia-onb-sheet .dia-sheet-head { position: relative; z-index: 1; }
+  .dia-onb-aura { position: absolute; inset: -22%; z-index: -1; pointer-events: none; opacity: 0.42;
+    background:
+      radial-gradient(36% 30% at 22% 20%, color-mix(in oklab, var(--tint) 70%, #ff8fb8) 0%, transparent 70%),
+      radial-gradient(34% 30% at 82% 32%, color-mix(in oklab, var(--tint) 60%, #ffc27a) 0%, transparent 70%),
+      radial-gradient(42% 34% at 50% 88%, color-mix(in oklab, var(--tint) 65%, #7ad7ff) 0%, transparent 70%);
+    animation: dia-aura 16s ease-in-out infinite alternate; }
+  .dia-onb-steps { display: flex; justify-content: center; gap: 6px; padding: 2px 0 0; position: relative; z-index: 1; }
+  .dia-onb-steps i { width: 6px; height: 6px; border-radius: 999px; background: var(--soft2); transition: width 0.35s var(--ease), background-color 0.3s; }
+  .dia-onb-steps i.done { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+  .dia-onb-steps i.on { width: 22px; background: var(--accent); }
+  .dia-onb { gap: 14px; padding: 6px 22px 24px; }
+  .dia-onb > :first-child { margin-top: auto; }
+  .dia-onb > :last-child { margin-bottom: auto; }
+  .dia-onb > * { animation: dia-onb-in 0.4s var(--ease) both; }
+  .dia-onb > :nth-child(2) { animation-delay: 40ms; }
+  .dia-onb > :nth-child(3) { animation-delay: 80ms; }
+  .dia-onb > :nth-child(4) { animation-delay: 120ms; }
+  .dia-onb > :nth-child(5) { animation-delay: 160ms; }
+  .dia-onb > :nth-child(6) { animation-delay: 200ms; }
+  .dia-onb > :nth-child(n+7) { animation-delay: 240ms; }
+  .dia-onb[data-dir="back"] { --dx: -16px; }
+  .dia-onb-hero { margin: 4px 0 0; text-align: center; text-wrap: balance; font: 780 27px/1.12 ui-rounded, "SF Pro Rounded", "Segoe UI Variable Display", system-ui, sans-serif; letter-spacing: -0.03em; }
   .dia-onb-sub { margin: 0 2px; font-size: 13px; line-height: 1.5; color: var(--mute); }
-  .dia-onb-list { display: grid; gap: 10px; margin: 4px 2px; padding: 0; list-style: none; font-size: 13.5px; line-height: 1.45; }
-  .dia-onb-card { appearance: none; display: flex; flex-direction: column; gap: 3px; width: 100%; box-sizing: border-box; padding: 12px 14px; text-align: start; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: inherit; font: inherit; cursor: pointer; transition: background-color 0.15s, border-color 0.15s; }
-  .dia-onb-card:hover { background: var(--soft); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
-  .dia-onb-card b { font-size: 14px; }
-  .dia-onb-card span { font-size: 12.5px; line-height: 1.4; color: var(--mute); }
-  .dia-onb-steps { display: flex; justify-content: center; gap: 5px; }
-  .dia-onb-steps i { width: 6px; height: 6px; border-radius: 50%; background: var(--soft2); }
-  .dia-onb-steps i.on { background: var(--accent); }
+  .dia-onb .dia-onb-sub { margin: 0 auto; max-width: 36ch; text-align: center; font-size: 14px; text-wrap: pretty; }
+  .dia-onb-mark { width: 44px; height: 44px; margin: 0 auto 4px; border-radius: 14px; display: grid; place-items: center; color: #fff;
+    background: linear-gradient(145deg, color-mix(in oklab, var(--tint) 85%, #ff8fb8), color-mix(in oklab, var(--tint) 80%, #6bc9ff));
+    box-shadow: 0 8px 22px color-mix(in srgb, var(--tint) 45%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    width: 76px; height: 76px; border-radius: 24px; animation: dia-onb-in 0.4s var(--ease) both, dia-float 4.4s 0.4s ease-in-out infinite; }
+  .dia-onb-mark .dia-svg { width: 38px; height: 38px; stroke-width: 1.4; }
+  .dia-onb-cards, .dia-onb-rows { display: grid; gap: 10px; }
+  .dia-onb-tile { flex: none; width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; font-weight: 750; font-size: 16px; color: #fff;
+    background: linear-gradient(145deg, hsl(var(--h, 250) 78% 62%), hsl(calc(var(--h, 250) + 36) 80% 54%)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3); }
+  .dia-onb-tile.dia-two { font-size: 13px; }
+  .dia-onb-tile .dia-svg { width: 18px; height: 18px; }
+  .dia-onb > .dia-onb-tile { width: 56px; height: 56px; border-radius: 18px; font-size: 24px; margin: 0 auto 2px; }
+  .dia-onb-card { appearance: none; display: flex; align-items: center; gap: 12px; width: 100%; box-sizing: border-box; padding: 12px 14px 12px 12px; text-align: start; border: 1px solid var(--line); border-radius: 18px; background: var(--card); color: inherit; font: inherit; cursor: pointer;
+    transition: transform 0.18s var(--ease), background-color 0.15s, border-color 0.15s, box-shadow 0.2s; }
+  .dia-onb-card:hover { transform: translateY(-1px); background: var(--soft2); border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); box-shadow: 0 6px 18px color-mix(in srgb, var(--tint) 18%, transparent); }
+  .dia-onb-card:active { transform: scale(0.985); }
+  .dia-onb-card-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .dia-onb-card b { font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .dia-onb-card em { font-style: normal; font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+  .dia-onb-card-text > span { font-size: 12.5px; line-height: 1.4; color: var(--mute); }
+  .dia-onb-card > .dia-svg { width: 14px; height: 14px; color: var(--mute); transform: rotate(-90deg); transition: transform 0.18s var(--ease), color 0.15s; }
+  .dia-onb-card:hover > .dia-svg { color: var(--fg); transform: rotate(-90deg) translateY(3px); }
+  .dia-onb-row { display: flex; align-items: center; gap: 12px; }
+  .dia-onb-row .dia-onb-tile { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); box-shadow: none; }
+  .dia-onb-row > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .dia-onb-row b { font-size: 13.5px; font-weight: 650; }
+  .dia-onb-row > div > span { font-size: 12.5px; line-height: 1.4; color: var(--mute); }
+  .dia-onb kbd { font: 600 12px ui-monospace, Menlo, Consolas, monospace; padding: 1px 7px; border-radius: 7px; background: var(--soft2); border: 1px solid var(--line); border-bottom-width: 2px; }
+  .dia-onb-callout { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 16px; background: var(--soft); font-size: 12.5px; line-height: 1.45; color: var(--mute); }
+  .dia-onb-callout .dia-onb-tile { width: 32px; height: 32px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); box-shadow: none; }
+  .dia-onb-center { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .dia-onb-added { text-align: center; }
+  .dia-onb-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; }
+  .dia-onb-nav:has(> :only-child) { justify-content: center; }
+  .dia-onb .dia-btn { border-radius: 999px; padding: 9px 20px; font-size: 13.5px; font-weight: 650; transition: background-color 0.15s, transform 0.12s var(--ease), box-shadow 0.2s, opacity 0.15s; }
+  .dia-onb .dia-btn.dia-primary { box-shadow: 0 6px 18px color-mix(in srgb, var(--tint) 40%, transparent); }
+  .dia-onb .dia-btn:active { transform: scale(0.96); }
+  .dia-onb .dia-btn[disabled] { opacity: 0.45; box-shadow: none; pointer-events: none; }
+  .dia-onb-ghost { appearance: none; border: 0; background: transparent; color: var(--mute); font: inherit; font-size: 13px; padding: 8px 12px; border-radius: 999px; cursor: pointer; transition: color 0.15s, background-color 0.15s, transform 0.12s var(--ease); }
+  .dia-onb-ghost:hover { color: var(--fg); background: var(--soft); }
+  .dia-onb-ghost:active { transform: scale(0.96); }
+  .dia-onb-check { width: 64px; height: 64px; margin: 0 auto 2px; border-radius: 50%; display: grid; place-items: center; color: #fff;
+    background: linear-gradient(145deg, #4fd99b, #2fbf86); box-shadow: 0 8px 24px rgba(63, 207, 142, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    animation: dia-onb-in 0.4s var(--ease) both, dia-pop-soft 0.5s 0.1s var(--ease) both; }
+  .dia-onb-check .dia-svg { width: 30px; height: 30px; stroke-width: 2; }
+  .dia-onb-check .dia-svg path { stroke-dasharray: 20; stroke-dashoffset: 20; animation: dia-draw 0.45s 0.3s var(--ease) forwards; }
+  .dia-onb-status { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; background: var(--soft); color: var(--mute); transition: background-color 0.2s, color 0.2s; }
+  .dia-onb-status i { width: 8px; height: 8px; border-radius: 50%; background: var(--mute); transition: background-color 0.2s, box-shadow 0.2s; }
+  .dia-onb-status[data-kind="busy"] i { animation: dia-breathe 1s ease-in-out infinite; }
+  .dia-onb-status[data-kind="ok"] { color: var(--fg); }
+  .dia-onb-status[data-kind="ok"] i { background: #3fcf8e; box-shadow: 0 0 0 4px rgba(63, 207, 142, 0.25); }
+  .dia-onb-status[data-kind="bad"] { color: var(--fg); }
+  .dia-onb-status[data-kind="bad"] i { background: var(--danger); box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 22%, transparent); }
   .dia-seg { display: flex; flex-wrap: wrap; gap: 6px; }
   .dia-seg .dia-chip.on { background: var(--accent); color: var(--on-accent); }
   .dia-found .dia-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+
+  /* ---- polish: small, quick motions (transform and opacity only; all switched off for reduced motion) ---- */
+  .dia-sheet { animation: dia-sheet-in 0.26s var(--ease) both; }
+  .dia-menu { transform-origin: 50% 100%; animation: dia-menu-up 0.16s var(--ease) both; }
+  .dia-hmenu { transform-origin: 100% 0; animation: dia-menu-down 0.16s var(--ease) both; }
+  .dia-hmenu.dia-mmenu { transform-origin: 0 0; }
+  .dia-menu-item, .dia-menu-choice, .dia-row-item { transition: background-color 0.12s, transform 0.12s var(--ease); }
+  .dia-menu-item:active, .dia-menu-choice:active, .dia-row-item:active { transform: scale(0.985); }
+  .dia-btn { transition: background-color 0.15s, transform 0.12s var(--ease), opacity 0.15s; }
+  .dia-btn:active { transform: scale(0.97); }
+  .dia-chip:active { transform: scale(0.96); }
+  .dia-ubub { transform-origin: 100% 100%; animation: dia-bubble-in 0.3s var(--ease) both; }
+  .dia-addnote { animation: dia-in 0.25s var(--ease) both; }
+  .dia-webbtn { transition: background-color 0.2s, color 0.2s, transform 0.12s var(--ease); }
+  .dia-webbtn.on .dia-svg { animation: dia-globe 0.55s var(--ease); }
+  .dia-modelbtn .dia-svg { transition: transform 0.2s var(--ease); }
+  .dia-modelbtn.dia-open .dia-svg { transform: rotate(180deg); }
+  .dia-head .dia-layout .dia-svg:last-child { transition: transform 0.2s var(--ease); }
+  .dia-head .dia-layout.dia-open .dia-svg:last-child { transform: rotate(180deg); }
+  .dia-composer { transition: border-color 0.2s, box-shadow 0.25s; }
+  .dia-composer:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent), 0 6px 22px color-mix(in srgb, var(--tint) 14%, transparent); }
 }
 
 @keyframes dia-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -565,6 +654,15 @@
 @keyframes dia-wave { 0%, 60%, 100% { opacity: 0.35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
 @keyframes dia-pill-in { from { opacity: 0; transform: translateY(5px) scale(0.97); } to { opacity: 1; transform: none; } }
 @keyframes dia-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dia-sheet-in { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes dia-menu-up { from { opacity: 0; transform: translateY(6px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes dia-menu-down { from { opacity: 0; transform: translateY(-6px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes dia-bubble-in { from { opacity: 0; transform: translateY(6px) scale(0.94); } to { opacity: 1; transform: none; } }
+@keyframes dia-globe { from { transform: rotate(-70deg) scale(0.8); } to { transform: none; } }
+@keyframes dia-pop-soft { from { transform: scale(0.6); } 60% { transform: scale(1.08); } to { transform: scale(1); } }
+@keyframes dia-float { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-6px) rotate(2deg); } }
+@keyframes dia-aura { from { transform: translate3d(-2%, -1%, 0) rotate(0deg) scale(1); } to { transform: translate3d(3%, 2%, 0) rotate(8deg) scale(1.08); } }
+@keyframes dia-onb-in { from { opacity: 0; transform: translateX(var(--dx, 16px)) scale(0.985); filter: blur(3px); } to { opacity: 1; transform: none; filter: blur(0); } }
 /* the chat button inside the URL bar (in Zen, the URL bar sits at the top of the left sidebar).
    Icon: Ionicons "chatbubble-ellipses" (MIT), the glyph Zen ships for its own chat icon.
    It is drawn as a mask filled with Zen's toolbar text colour (white in dark spaces), so it does not depend on
@@ -586,6 +684,7 @@
 #dia-sidebar-urlbar[nudge] { animation: dia-nudge 0.35s; }
 @keyframes dia-nudge { 20%, 60% { transform: translateX(-2px); } 40%, 80% { transform: translateX(2px); } }
 @media (prefers-reduced-motion: reduce) {
+  #dia-dock .dia-onb-aura, #dia-dock .dia-onb-mark, #dia-dock .dia-onb-status i { animation: none !important; }
   #dia-dock, #dia-dock * { animation-duration: 1ms !important; animation-delay: 0s !important; transition-duration: 1ms !important; }
   #dia-dock .dia-spin, #dia-dock .dia-chipsrc > i, #dia-dock .dia-dots i, #dia-dock .dia-progress::before, #dia-dock .dia-send::after, #dia-dock .dia-streaming .dia-answer *::after { animation: none !important; }
   #dia-dock .dia-step.dia-active .dia-step-text, #dia-dock .dia-pill-text, #dia-dock .dia-think.dia-live summary span { animation: none !important; background: none !important; -webkit-text-fill-color: currentColor; color: var(--fg); }
@@ -597,7 +696,14 @@
   const tabHasPage = (t) => {
     try { return /^https?$/.test(t?.linkedBrowser?.currentURI?.scheme || "") && !t.hasAttribute?.("zen-empty-tab"); } catch { return false; }
   };
-  const IS_MAC = navigator.platform.startsWith("Mac");
+  // AppConstants is the reliable answer; navigator.platform can be spoofed by fingerprinting protection
+  const IS_MAC = (() => { try { return ChromeUtils.importESModule("resource://gre/modules/AppConstants.sys.mjs").AppConstants.platform === "macosx"; } catch { return navigator.platform.startsWith("Mac"); } })();
+  const HAS_APPLE = IS_MAC; // Apple Intelligence (through AFM Server) is macOS-only: on Windows and Linux it is never listed, offered or mentioned
+  const THIS_DEVICE = IS_MAC ? "this Mac" : "this computer";
+  // small, quick motions through the Web Animations API, skipped when the system asks for reduced motion
+  const bump = (el, frames, ms = 240) => {
+    try { if (el?.animate && !matchMedia("(prefers-reduced-motion: reduce)").matches) el.animate(frames, { duration: ms, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }); } catch {}
+  };
   const SHORTCUT = IS_MAC ? "⌘E" : "Ctrl+E";
   const isToggleKey = (e) =>
     e.code === "KeyE" && !e.altKey && !e.shiftKey &&
@@ -628,8 +734,14 @@
     base: normBase(pref("server", "") || pref("applebase", "") || DEFAULT_BASE),
     key: pref("apikey", "").trim(),
   });
-  const allModels = () => [builtinModel(), ...store.models().map((m) => ({ ...m, base: normBase(m.base) }))];
-  const activeModel = () => { const id = pref("activemodel", "apple"); return allModels().find((m) => m.id === id) || builtinModel(); };
+  const allModels = () => [...(HAS_APPLE ? [builtinModel()] : []), ...store.models().map((m) => ({ ...m, base: normBase(m.base) }))];
+  // With no model at all (a new Windows or Linux install) there is a placeholder; sending a message then opens the setup guide.
+  const NO_MODEL = { id: "none", name: "Choose a model", model: "", type: "openai", base: "", key: "", noModel: true };
+  const defaultModelId = () => (HAS_APPLE ? "apple" : store.models()[0]?.id || "");
+  const activeModel = () => {
+    const id = pref("activemodel", defaultModelId()), list = allModels();
+    return list.find((m) => m.id === id) || list.find((m) => m.id === defaultModelId()) || list[0] || NO_MODEL;
+  };
   // "apple" = the small-context prompt layout (one flattened turn, tight caps); "openai" = normal multi-turn chat
   const provider = () => {
     const m = activeModel();
@@ -656,6 +768,59 @@
   const EFFORT_NAMES = ["Low", "Medium", "High", "Max"];
   const thinkBudget = () => (isNative() ? [0, 1024, 8192, 24576][effort() - 1] : 0);
   const reasoningEffort = () => ["low", "medium", "high", "high"][effort() - 1];
+  // ----- Claude: which kind of thinking each model takes (from Anthropic's docs) -----
+  // Claude 4.7 and later, including every 5.x model, take only adaptive thinking and answer the old "budget_tokens" form with a 400
+  // error. 4.6 takes both, 4.5 and older take only budget_tokens, and the 3.x models (except 3.7) take neither. If a model turns out
+  // to differ, the request is retried the other way and what worked is remembered.
+  const claudeStyleMemo = new Map();
+  function claudeThinkingStyle(id) {
+    const s = String(id || "").toLowerCase();
+    if (/^claude-3-(?!7)/.test(s)) return "none";
+    if (/^claude-3-7/.test(s)) return "budget";
+    const m = s.match(/claude-(opus|sonnet|haiku|fable|mythos)-(\d+)(?:-(\d{1,2}))?(?!\d)/);
+    if (!m) return "adaptive"; // a name that isn't recognised is a newer model
+    const major = +m[2], minor = m[3] ? +m[3] : 0;
+    return m[1] === "fable" || m[1] === "mythos" || major >= 5 || (major === 4 && minor >= 6) ? "adaptive" : "budget";
+  }
+  const claudeFlags = (id, quick) => {
+    const lvl = quick ? 1 : effort(); // helper calls (routing, notes, checks) never need to think
+    return { style: claudeStyleMemo.get(id) || claudeThinkingStyle(id), lvl, display: true, effort: ["low", "medium", "high", "max"][lvl - 1] };
+  };
+  function claudeBody(f, id, req, system) {
+    const sys = [{ type: "text", text: system }];
+    if (req.pageBlock) sys.push({ type: "text", text: req.pageBlock, cache_control: { type: "ephemeral" } });
+    const think = [0, 1024, 8192, 24576][f.lvl - 1];
+    const b = { model: id, max_tokens: 4096, stream: true, system: sys, messages: req.messages };
+    if (f.style === "budget" && think >= 1024) { b.max_tokens += think; b.thinking = { type: "enabled", budget_tokens: think }; }
+    if (f.style === "adaptive") {
+      b.max_tokens = f.lvl >= 2 ? 16000 : 8192; // thinking counts against max_tokens, so leave room for the answer
+      if (f.lvl >= 2) b.thinking = f.display ? { type: "adaptive", display: "summarized" } : { type: "adaptive" };
+      if (f.effort) b.output_config = { effort: f.effort };
+    }
+    if (req.web) b.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }];
+    return b;
+  }
+  // a 400 that names a setting we sent: change that one setting and try again (returns null when it isn't such an error)
+  function claudeRetry(f, e, id) {
+    if (e?.status !== 400) return null;
+    const msg = String(e.message || "");
+    if (f.display && /display/i.test(msg)) return { ...f, display: false };
+    if (f.effort && /effort/i.test(msg)) return { ...f, effort: f.effort === "max" ? "high" : "" };
+    if (/thinking|budget_tokens|adaptive/i.test(msg)) {
+      const style = f.style === "adaptive" ? (f.lvl >= 2 ? "budget" : "none") : f.style === "budget" ? "adaptive" : null;
+      if (!style) return null;
+      claudeStyleMemo.set(id, style);
+      return { ...f, style };
+    }
+    return null;
+  }
+  // OpenAI's GPT-5 and o-series models take reasoning_effort; others refuse it, so a refusal is remembered and not sent again
+  const noReasoning = new Set();
+  const takesReasoning = () => {
+    const m = activeModel();
+    if (noReasoning.has(m.model)) return false;
+    return !!m.reasoning || (m.type === "openai" && /^https:\/\/api\.openai\.com\//i.test(m.base || "") && /^(gpt-5|o\d)/i.test(m.model || ""));
+  };
   // The internet is only ever searched when the globe is on for that message (or @Web). Without it the assistant works from
   // the page that is already loaded and the links on that page, nothing else. (The old Automatic / Only when I ask / Off
   // setting is gone: it is always "manual" now, whatever an older version saved.)
@@ -1729,7 +1894,7 @@
         if (req.web) body.tools = [{ google_search: {} }];
         if (useThink) {
           // Gemini 2.x takes a token budget, 3.x a level (never both). Without a setting, 3.x gets "low" so chat stays fast.
-          if (tb) body.generationConfig.thinkingConfig = /gemini-2\./.test(mid) ? { thinkingBudget: tb, includeThoughts: true } : { thinkingLevel: tb <= 1024 ? "low" : tb <= 8192 ? "medium" : "high", includeThoughts: true };
+          if (tb) body.generationConfig.thinkingConfig = /gemini-2\./.test(mid) ? { thinkingBudget: tb, includeThoughts: true } : { thinkingLevel: tb <= 1024 ? "medium" : "high", includeThoughts: true };
           else if (/gemini-(3|4)/.test(mid)) body.generationConfig.thinkingConfig = { thinkingLevel: "low" };
         }
         let got = false, gotText = false;
@@ -1783,24 +1948,25 @@
     if (prov === "anthropic") {
       url = "https://api.anthropic.com/v1/messages";
       headers = { "content-type": "application/json", "x-api-key": apiKey(), "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" };
-      const think = thinkBudget();
-      const sys = [{ type: "text", text: system }];
-      if (req.pageBlock) sys.push({ type: "text", text: req.pageBlock, cache_control: { type: "ephemeral" } });
-      body = { model: model(), max_tokens: 4096 + (think >= 1024 ? think : 0), stream: true, system: sys, messages: req.messages };
-      if (think >= 1024) body.thinking = { type: "enabled", budget_tokens: think };
-      if (req.web) body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }];
+      // the body is built below, once per attempt (the thinking settings may need adjusting after a 400)
     } else {
       url = baseUrl() + "/chat/completions";
       headers = { "content-type": "application/json", ...authHeaders() };
       body = { model: model(), stream: true, messages: [{ role: "system", content: system + (req.pageBlock ? "\n\n" + req.pageBlock : "") }, ...req.messages] };
-      if (activeModel().reasoning) body.reasoning_effort = req.quick ? "low" : reasoningEffort(); // the Effort slider, for models that take it
+      if (takesReasoning()) body.reasoning_effort = req.quick ? "low" : reasoningEffort(); // the Effort slider, for models that take it
       // The small on-device model invents details when it samples freely, so keep it close to deterministic: 0 for the quick helper
       // calls (routing, notes, fact-checking), a low value for the answer itself.
       if (prov === "apple") body.temperature = req.quick ? 0 : 0.2;
     }
     let sawTool = false, toolIdx = -1, toolBuf = "";
     const results = [], cited = [];
+    let cflags = prov === "anthropic" ? claudeFlags(model(), req.quick) : null;
+    for (let tryNo = 0; ; tryNo++) {
+    if (cflags) body = claudeBody(cflags, model(), req, system);
+    let started = false;
+    try {
     for await (const j of sseEvents(resilientChunks(url, headers, JSON.stringify(body), signal))) {
+      started = true;
       if (prov === "anthropic") {
         if (j.type === "error") throw new Error(j.error?.message || "API error");
         if (j.type === "content_block_start") {
@@ -1826,6 +1992,15 @@
         if (rs) yield { t: "think", d: rs };
         if (dl.content) yield { t: "text", d: dl.content };
       }
+    }
+    break;
+    } catch (e) {
+      if (!started && !signal?.aborted) {
+        if (cflags && tryNo < 4) { const next = claudeRetry(cflags, e, model()); if (next) { cflags = next; continue; } }
+        else if (!cflags && body.reasoning_effort && e.status === 400 && /reasoning/i.test(String(e.message || ""))) { noReasoning.add(model()); delete body.reasoning_effort; continue; }
+      }
+      throw e;
+    }
     }
     // sources: what the model actually cited if we know, otherwise everything it looked at
     const src = dedupeSources(cited.length ? cited : results);
@@ -3328,7 +3503,7 @@
       }
       flashNote("Reading PDF…", true);
       const text = await pdfText(buf);
-      if (!text) { flashNote("Couldn't read that PDF's text. AFM Server's apple.local model needs text; try copying the relevant passage into chat."); return false; }
+      if (!text) { flashNote(activeModel().builtin ? "Couldn't read that PDF's text. AFM Server's apple.local model needs text; try copying the relevant passage into chat." : "Couldn't read that PDF's text. Try copying the relevant passage into chat."); return false; }
       clearNote();
       addContext({ kind: "file", label: name, url, key: url, text: text.slice(0, 24000) });
       return true;
@@ -4512,6 +4687,7 @@
       return { q, label: label || q, raw: opts.text !== undefined ? "" : input.value.trim(), skill: sk, fromSkill: !!sk || !!opts.label, refs, formats, manage, web: webOn, usePage: usePage && !!srcUrl() };
     }
     function submit(opts = {}) {
+      if (activeModel().noModel) { if (!sheetEl) openOnboarding("pick"); return; } // nothing to chat with yet: set one up first
       if (reading.size) { // a tab or link card is still reading: send as soon as it is in
         flashNote("Finishing reading your tabs…", true);
         Promise.allSettled([...reading]).then(() => { clearNote(); if (!closed) submit(opts); });
@@ -4524,6 +4700,7 @@
       }
       const snap = snapshot(opts);
       if (!snap) return;
+      bump(sendBtn, [{ transform: "scale(0.82)" }, { transform: "scale(1.12)", offset: 0.55 }, { transform: "none" }], 280);
       if (opts.text === undefined) { input.value = ""; autosize(); }
       refs = []; skill = null; formats = []; manage = false; // the composer empties (snapshot keeps the old ones)
       closePop(); closePicker();
@@ -4722,7 +4899,7 @@
       const base = ["Quick, short answers.", "Balanced answers.", "Thorough answers.", "The most careful answers."][v - 1];
       const p = provider();
       const extra = p === "apple" ? ["", "", " Reads the whole page in parts first, so it takes longer.", " Reads the whole page, drafts an answer, then refines it. Slowest."][v - 1]
-        : p === "gemini" || activeModel().reasoning ? ["", " Thinks a little.", " Thinks harder.", " Thinks the longest."][v - 1] : "";
+        : p === "gemini" || (p === "anthropic" && claudeThinkingStyle(model()) !== "none") || takesReasoning() ? ["", " Thinks a little.", " Thinks harder.", " Thinks the longest."][v - 1] : "";
       return base + extra;
     };
     function effortControl() {
@@ -4757,8 +4934,9 @@
     function refreshModel() {
       if (!modelBtnEl) return;
       const m = activeModel();
-      modelBtnEl.querySelector(".dia-modelname").textContent = m.name;
-      modelBtnEl.title = `Model: ${m.name} (${m.model}). Click to switch.`;
+      const nameEl = modelBtnEl.querySelector(".dia-modelname");
+      if (nameEl.textContent !== m.name) { nameEl.textContent = m.name; bump(nameEl, [{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }], 220); }
+      modelBtnEl.title = m.noModel ? "Choose a model to start chatting." : `Model: ${m.name} (${m.model}). Click to switch.`;
     }
     async function saveModel(entry) {
       const cur = store.models();
@@ -4882,7 +5060,7 @@
     const OLLAMA_PRESET = {
       type: "openai", name: "Ollama", base: "http://localhost:11434/v1",
       keyUrl: "https://ollama.com/download", keyLabel: "Get Ollama",
-      description: "Start Ollama on this Mac, then use Find models to select a model you have pulled locally.",
+      description: `Start Ollama on ${THIS_DEVICE}, then use Find models to select a model you have pulled locally.`,
     };
 
     // ----- model manager sheet -----
@@ -4897,7 +5075,7 @@
           h("button", { className: "dia-icon", title: "Edit", onclick: (e) => { e.stopPropagation(); edit(m); } }, icon("edit")),
           h("button", { className: "dia-icon", title: "Delete", onclick: (e) => {
             e.stopPropagation();
-            if (pref("activemodel", "apple") === m.id) setPref("activemodel", "apple");
+            if (pref("activemodel", defaultModelId()) === m.id) setPref("activemodel", HAS_APPLE ? "apple" : "");
             store.saveModels(store.models().filter((x) => x.id !== m.id)).then(() => { refreshModel(); paint(); });
           } }, icon("trash")),
         ]));
@@ -4913,74 +5091,111 @@
             h("button", { className: "dia-btn", textContent: "＋ Other", onclick: () => renderCustomForm(body, null, paint, paint) })),
           h("div", { className: "dia-menu-sep", textContent: "Your models" }),
           ...(mine.length ? mine.map(row) : [h("div", { className: "dia-note", textContent: "Nothing yet. Choose a provider above, or connect any OpenAI-compatible server. Then switch models from the top of the sidebar." })]),
-          h("div", { className: "dia-menu-sep", textContent: "Built in" }),
-          row(builtinModel()));
+          ...(HAS_APPLE ? [h("div", { className: "dia-menu-sep", textContent: "Built in" }), row(builtinModel())] : []));
       };
       const edit = (m) => m.type === "gemini" ? renderGeminiForm(body, m, paint, paint) : renderCustomForm(body, m, paint, paint, m.type === "anthropic" ? CLAUDE_PRESET : {});
       paint();
     }
 
     // ----- setup guide (first run, and "Run setup again" in the mod's settings) -----
-    function openOnboarding() {
+    // A short, friendly walk-through: welcome, pick an AI, how hard it should think, done. Apple Intelligence is offered on a Mac only.
+    function openOnboarding(start) {
       const body = h("div", { className: "dia-sheet-body dia-onb" });
-      openSheet("Set up", body);
+      openSheet("", body);
       sheetEl.dataset.onb = "1";
-      const dots = (n) => h("div", { className: "dia-onb-steps" }, ...[0, 1, 2, 3].map((i) => h("i", { className: i === n ? "on" : "" })));
-      const hero = (t) => h("div", { className: "dia-onb-hero", textContent: t });
-      const sub = (t) => h("div", { className: "dia-onb-sub", textContent: t });
+      sheetEl.classList.add("dia-onb-sheet");
+      sheetEl.prepend(h("div", { className: "dia-onb-aura" }));
+      const dotsEl = h("div", { className: "dia-onb-steps" }, ...[0, 1, 2, 3].map(() => h("i")));
+      body.before(dotsEl); // outside the body, so the active dot can stretch smoothly from step to step
+      let stage = 0;
+      const show = (n, ...kids) => {
+        body.dataset.dir = n < stage ? "back" : "fwd"; stage = n;
+        [...dotsEl.children].forEach((d, i) => { d.className = i === n ? "on" : i < n ? "done" : ""; });
+        body.replaceChildren(...kids);
+        body.scrollTop = 0;
+      };
+      const hero = (t) => h("h1", { className: "dia-onb-hero", textContent: t });
+      const sub = (t) => h("p", { className: "dia-onb-sub", textContent: t });
       const btn = (label, fn, primary) => h("button", { className: "dia-btn" + (primary ? " dia-primary" : ""), textContent: label, onclick: fn });
-      const nav = (...b) => h("div", { className: "dia-edit-row" }, ...b);
-      const card = (title, text, fn) => h("button", { className: "dia-onb-card", onclick: fn }, h("b", { textContent: title }), h("span", { textContent: text }));
-      let pickStep, afmStep, prefsStep, doneStep;
-      const modelAddedStep = (entry) => body.replaceChildren(dots(1), hero(`${entry.name} is ready`),
-        sub("You can continue setup now. Adding more models is optional, and you can add or switch models later from the model menu."),
-        ...(store.models().length ? [h("div", { className: "dia-note", textContent: "Added: " + store.models().map((m) => m.name).join(", ") })] : []),
-        nav(btn("Add another model", () => pickStep()), btn("Continue", () => prefsStep(), true)));
-      const welcome = () => body.replaceChildren(dots(0), hero("Chat with any page"),
-        h("ul", { className: "dia-onb-list" }, ...[
-          "Ask about the page you're on, or drag in tabs, files and text for extra context.",
-          "Pick your AI: private on your Mac, or a cloud model like Gemini. Switch any time from the top of the sidebar.",
-          "It searches the web by itself when a question needs fresh information.",
-        ].map((t) => h("li", { textContent: t }))),
-        nav(btn("Skip", () => closeSheet()), btn("Get started", () => pickStep(), true)));
-      pickStep = () => body.replaceChildren(dots(1), hero("Choose your AI"), sub("You can add more later and switch between them."),
-        card("Apple Intelligence", "Private and free. Runs on this Mac through AFM Server.", () => afmStep()),
-        card("Google Gemini", "Fast and capable. Needs a free API key from Google AI Studio.", () => renderGeminiForm(body, null, (entry) => modelAddedStep(entry), () => pickStep())),
-        card("Claude", "Connect directly with an Anthropic API key and choose from the Claude models available to you.", () => renderCustomForm(body, null, (entry) => modelAddedStep(entry), () => pickStep(), CLAUDE_PRESET)),
-        card("OpenAI · ChatGPT API", "Use an OpenAI platform API key and list the models available to it.", () => renderCustomForm(body, null, (entry) => modelAddedStep(entry), () => pickStep(), OPENAI_PRESET)),
-        card("DeepSeek", "A ready-to-use DeepSeek API setup with model discovery.", () => renderCustomForm(body, null, (entry) => modelAddedStep(entry), () => pickStep(), DEEPSEEK_PRESET)),
-        card("Ollama", "Run models locally on this Mac. No cloud API key needed.", () => renderCustomForm(body, null, (entry) => modelAddedStep(entry), () => pickStep(), OLLAMA_PRESET)),
-        card("Other compatible model", "LM Studio, OpenRouter, or another OpenAI-compatible server.", () => renderCustomForm(body, null, (entry) => modelAddedStep(entry), () => pickStep())),
-        ...(store.models().length ? [h("div", { className: "dia-note", textContent: "Added: " + store.models().map((m) => m.name).join(", ") })] : []),
-        nav(btn("Back", welcome), btn("Continue", () => prefsStep(), true)));
-      afmStep = () => {
-        const st = h("div", { className: "dia-note" });
+      const ghost = (label, fn) => h("button", { className: "dia-onb-ghost", textContent: label, onclick: fn });
+      const nav = (...b) => h("div", { className: "dia-onb-nav" }, ...b);
+      const mark = () => h("div", { className: "dia-onb-mark" }, icon("chat"));
+      const tile = (ico) => h("span", { className: "dia-onb-tile" }, icon(ico));
+      const ptile = (letter, hue) => { const t = h("span", { className: "dia-onb-tile" + (letter.length > 1 ? " dia-two" : ""), textContent: letter }); t.style.setProperty("--h", hue); return t; };
+      const row = (ico, title, text) => h("div", { className: "dia-onb-row" }, tile(ico), h("div", {}, h("b", { textContent: title }), h("span", { textContent: text })));
+      const card = (letter, hue, title, text, fn, badge) => h("button", { className: "dia-onb-card", onclick: fn },
+        ptile(letter, hue),
+        h("span", { className: "dia-onb-card-text" }, h("b", {}, title, ...(badge ? [h("em", { textContent: badge })] : [])), h("span", { textContent: text })),
+        icon("chev"));
+      const added = () => (store.models().length ? [h("div", { className: "dia-note dia-onb-added", textContent: "Added: " + store.models().map((m) => m.name).join(", ") })] : []);
+      let pickStep, afmStep, prefsStep, doneStep, modelAddedStep;
+
+      const welcome = () => show(0, mark(),
+        hero("Meet your new sidebar"),
+        sub("Chat with any page, right next to it. Summarize, fact-check or dig deeper without leaving the tab."),
+        h("div", { className: "dia-onb-rows" },
+          row("page", "Knows the page you're on", "Drag in tabs, files or selected text for more context."),
+          row("globe", "Searches only when you ask", "Press the globe and it looks things up, with sources."),
+          row("spark", "Your AI, your choice", HAS_APPLE ? "Private on your Mac, or Gemini, Claude and GPT." : "Gemini, Claude, GPT or a model on this computer. Switch any time.")),
+        nav(ghost("Skip for now", () => closeSheet()), btn("Let's go", () => pickStep(), true)));
+
+      pickStep = () => {
+        const again = () => pickStep();
+        const preset = (pr) => () => renderCustomForm(body, null, (entry) => modelAddedStep(entry), again, pr);
+        const haveOne = HAS_APPLE || store.models().length > 0;
+        show(1, hero("Who do you want to chat with?"), sub("Pick one to start. You can add more and switch any time."),
+          h("div", { className: "dia-onb-cards" },
+            ...(HAS_APPLE ? [card("A", 275, "Apple Intelligence", "Private and free. Runs on this Mac and nothing leaves it.", () => afmStep(), "On your Mac")] : []),
+            card("G", 215, "Google Gemini", "Fast and capable. Needs a free API key from Google AI Studio.", () => renderGeminiForm(body, null, (entry) => modelAddedStep(entry), again), HAS_APPLE ? "" : "Easiest start"),
+            card("C", 18, "Claude", "Connect with an Anthropic API key and pick from your Claude models.", preset(CLAUDE_PRESET)),
+            card("O", 160, "OpenAI · ChatGPT API", "Use an OpenAI platform API key and list the models it can use.", preset(OPENAI_PRESET)),
+            card("D", 200, "DeepSeek", "A ready-to-go DeepSeek API setup with model discovery.", preset(DEEPSEEK_PRESET)),
+            card("Ol", 38, "Ollama", `Run models locally on ${THIS_DEVICE}. No cloud API key needed.`, preset(OLLAMA_PRESET), "Private"),
+            card("+", 300, "Something else", "LM Studio, OpenRouter, or any OpenAI-compatible server.", preset(undefined))),
+          ...added(),
+          nav(ghost("Back", welcome), haveOne ? btn("Continue", () => prefsStep(), true) : ghost("Skip for now", () => closeSheet())));
+      };
+
+      modelAddedStep = (entry) => show(1, h("div", { className: "dia-onb-check" }, icon("check")),
+        hero(`${entry.name} is ready`),
+        sub("Add another if you like. You can switch models any time from the top of the sidebar."),
+        ...added(),
+        nav(ghost("Add another", () => pickStep()), btn("Continue", () => prefsStep(), true)));
+
+      afmStep = () => { // only reachable on a Mac
+        const st = h("div", { className: "dia-onb-status" }, h("i"), h("span", { textContent: "Not checked yet" }));
+        st.dataset.kind = "idle";
+        const setSt = (kind, text) => { st.dataset.kind = kind; st.lastChild.textContent = text; };
         const test = btn("Test connection", async () => {
-          test.disabled = true; st.textContent = "Checking…";
+          test.disabled = true; setSt("busy", "Checking…");
           const b = builtinModel();
-          try { await httpGet(b.base + "/models", b.key ? { authorization: `Bearer ${b.key}`, "x-api-key": b.key } : {}); st.textContent = "Connected. AFM Server is running."; }
-          catch (e) { st.textContent = e instanceof TypeError ? `Couldn't reach AFM Server at ${b.base}. Start it, then test again.` : "AFM Server answered, so it's running."; }
+          try { await httpGet(b.base + "/models", b.key ? { authorization: `Bearer ${b.key}`, "x-api-key": b.key } : {}); setSt("ok", "Connected. AFM Server is running."); }
+          catch (e) { if (e instanceof TypeError) setSt("bad", "Couldn't reach AFM Server. Open it, then test again."); else setSt("ok", "AFM Server answered, so it's running."); }
           test.disabled = false;
         });
-        body.replaceChildren(dots(1), hero("Apple Intelligence"),
-          sub("It runs on your Mac through AFM Server, so nothing leaves your computer. Start AFM Server, then test the connection. If you changed its address or key, set them under Advanced in the mod's settings."),
-          nav(test), st,
-          nav(btn("Back", () => pickStep()), btn("Use Apple Intelligence", () => { setPref("activemodel", "apple"); refreshModel(); prefsStep(); }, true)));
+        show(1, ptile("A", 275), hero("Apple Intelligence"),
+          sub("It runs on your Mac through AFM Server, so nothing leaves your computer. Open AFM Server (the lightning bolt in your menu bar), then test the connection."),
+          h("div", { className: "dia-onb-center" }, test, st),
+          h("div", { className: "dia-note dia-onb-added", textContent: "Needs a Mac with Apple Silicon, macOS 26 and Apple Intelligence turned on. If you changed its address or key, set them under Advanced in the mod's settings." }),
+          nav(ghost("Back", () => pickStep()), btn("Use Apple Intelligence", () => { setPref("activemodel", "apple"); refreshModel(); prefsStep(); }, true)));
       };
-      prefsStep = () => {
-        body.replaceChildren(dots(2), hero("How should it work?"), effortControl(),
-          h("div", { className: "dia-eff-top" }, h("span", { textContent: "Web search" })),
-          h("div", { className: "dia-note", textContent: "It never goes online on its own. Press the globe button when you want it to search the internet. Until then it only uses the page you're on and the links on that page." }),
-          nav(btn("Back", () => pickStep()), btn("Finish", () => doneStep(), true)));
-      };
-      doneStep = () => body.replaceChildren(dots(3), hero("You're all set"),
-        h("ul", { className: "dia-onb-list" }, ...[
-          `Press ${SHORTCUT} any time to show or hide the sidebar.`,
-          "Change the model or the effort from the pill at the top left.",
-          "Drag in tabs, files or selected text to add context.",
-        ].map((t) => h("li", { textContent: t }))),
+
+      prefsStep = () => show(2, hero("How hard should it think?"),
+        sub("Quick answers, or slower and more careful ones. You can change this any time from the model menu."),
+        effortControl(),
+        h("div", { className: "dia-onb-callout" }, tile("globe"), h("span", { textContent: "Web search stays off until you press the globe. It never goes online on its own." })),
+        nav(ghost("Back", () => pickStep()), btn("Finish", () => doneStep(), true)));
+
+      doneStep = () => show(3, h("div", { className: "dia-onb-check" }, icon("check")),
+        hero("You're all set"),
+        sub("Here's the short version."),
+        h("div", { className: "dia-onb-rows" },
+          h("div", { className: "dia-onb-row" }, tile("sidebar"), h("div", {}, h("b", {}, "Press ", h("kbd", { textContent: SHORTCUT }), " any time"), h("span", { textContent: "Shows or hides the sidebar." }))),
+          row("chat", "Switch models or effort", "Use the pill at the top left."),
+          row("drop", "Add context", "Drag in tabs, files or selected text.")),
         nav(btn("Start chatting", () => { closeSheet(); focusInput(); }, true)));
-      welcome();
+
+      if (start === "pick") pickStep(); else welcome();
     }
 
     // keepSplit: re-attach the other split pane(s) as locked pills. open() passes false because it
@@ -5108,7 +5323,7 @@
       const mode = pref("autosummarize", "youtube"); // "true" = always, "youtube" = only on videos
       const needSetup = !bool("setupdone", false);
       if (needSetup) setTimeout(() => { if (!closed && panel && !panel.hidden && !sheetEl) openOnboarding(); }, 300); // first run: the setup guide
-      if (!needSetup && srcUrl() && (mode === "true" || (mode === "youtube" && isVid()))) {
+      if (!needSetup && !activeModel().noModel && srcUrl() && (mode === "true" || (mode === "youtube" && isVid()))) {
         const first = skillsFor(isVid())[0];
         splitDone.then(() => { if (!closed && !started && !busy) runSkill(first); });
       }
@@ -5202,7 +5417,7 @@
     if (stale()) return;
     try {
       await store.saveModels([]);
-      setPref("activemodel", "apple");
+      setPref("activemodel", HAS_APPLE ? "apple" : "");
       Services.prefs.setBoolPref(PREF + "setupdone", false);
       sessions.forEach((x) => x.refreshModel());
       if (window === Services.wm.getMostRecentWindow("navigator:browser")) ensureSession()?.startOnboarding(); // shows at once when a page is open, else on the next open

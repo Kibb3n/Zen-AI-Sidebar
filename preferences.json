@@ -176,13 +176,21 @@
   },
   {
     "type": "separator",
-    "label": "**Advanced**"
+    "label": "**Advanced**",
+    "disabledOn": [
+      "windows",
+      "linux"
+    ]
   },
   {
     "property": "mod.dia-sidebar.advanced",
     "label": "Show advanced options",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": false,
+    "disabledOn": [
+      "windows",
+      "linux"
+    ]
   },
   {
     "type": "separator",
@@ -195,6 +203,10 @@
           "value": true
         }
       }
+    ],
+    "disabledOn": [
+      "windows",
+      "linux"
     ]
   },
   {
@@ -210,6 +222,10 @@
           "value": true
         }
       }
+    ],
+    "disabledOn": [
+      "windows",
+      "linux"
     ]
   },
   {
@@ -225,6 +241,10 @@
           "value": true
         }
       }
+    ],
+    "disabledOn": [
+      "windows",
+      "linux"
     ]
   }
 ]

@@ -2,7 +2,7 @@
 
 A Dia-style AI chat sidebar for the Zen browser, installed as a Sine mod. Press **⌘E** (Ctrl+E on Windows/Linux) on any web page and chat about it, with the page sitting right next to the chat.
 
-It works with Apple Intelligence (runs on your Mac, no API key), Gemini, Claude, OpenAI, DeepSeek, Ollama, or any OpenAI-compatible model.
+It works on macOS, Windows and Linux with Gemini, Claude, OpenAI, DeepSeek, Ollama or any OpenAI-compatible model, and on a Mac also with Apple Intelligence (on-device, no API key).
 
 ## What it does
 
@@ -24,7 +24,9 @@ It works with Apple Intelligence (runs on your Mac, no API key), Gemini, Claude,
 
 The script must be named `dia-sidebar.uc.js`. On first open, a short guide helps you pick a model.
 
-## Using Apple Intelligence with AFM Server
+## Using Apple Intelligence with AFM Server (Mac only)
+
+Apple Intelligence only exists on macOS, so on Windows and Linux it is never shown, offered or mentioned anywhere in the mod. Skip to *Other models* below.
 
 Apple Intelligence runs on your Mac through **AFM Server**, a small menu bar app that lets other apps talk to Apple's on-device model. The mod is already set up for its default address, so you mostly just install it and leave it running.
 
@@ -60,13 +62,17 @@ Apple Intelligence runs on your Mac through **AFM Server**, a small menu bar app
 | Empty or generic replies | Apple Intelligence isn't on, or is still downloading. Check System Settings. |
 | Port already in use | Change the port in AFM Server's menu bar controls, then update the address in the mod. |
 
+## Windows and Linux
+
+The setup guide opens the first time you press **Ctrl+E**. It leads with Google Gemini, which needs only a free API key from Google AI Studio. You can also use Claude, OpenAI or DeepSeek with an API key, or run a model on your own computer with Ollama (no key at all). Until a model is added, the pill at the top of the sidebar says *Choose a model*, and sending a message opens setup.
+
 ## Other models
 
-Click the model name at the top left of the sidebar, then **Add or manage models…**. Gemini, Claude, OpenAI and DeepSeek need an API key. Ollama and other local servers need only their address. Keys are stored as plain text in `dia-sidebar-models.json` in your Firefox profile, never in this repo.
+Click the model name at the top left of the sidebar, then **Add or manage models…**. Gemini, Claude, OpenAI and DeepSeek need an API key. Ollama and other local servers need only their address. The **Effort** slider also sets how hard Claude, Gemini and GPT-5 / o-series models think. The mod picks the setting each model accepts (Claude 4.7 and newer, including 5.x, use adaptive thinking; older Claude models use a thinking budget) and quietly retries if a provider rejects one, so you don't have to configure anything. Keys are stored as plain text in `dia-sidebar-models.json` in your Firefox profile, never in this repo.
 
 ## Settings
 
-Sine → this mod → settings. Automatic summaries, Enter-to-send, search provider (DuckDuckGo, Google, Brave or SearXNG), what to attach, colours and text size, saving history, and the AFM Server address and key under Advanced. Model and effort are in the sidebar's model menu.
+Sine → this mod → settings. Automatic summaries, Enter-to-send, search provider (DuckDuckGo, Google, Brave or SearXNG), what to attach, colours and text size, saving history, and, on a Mac, the AFM Server address and key under Advanced. Model and effort are in the sidebar's model menu.
 
 ## If nothing appears
 
