@@ -72,7 +72,7 @@ Click the model name at the top left of the sidebar, then **Add or manage models
 
 ## Settings
 
-Sine → this mod → settings. Automatic summaries, Enter-to-send, search provider (DuckDuckGo, Google, Brave or SearXNG), what to attach, colours and text size, saving history, and, on a Mac, the AFM Server address and key under Advanced. Model and effort are in the sidebar's model menu.
+Sine → this mod → settings. Changes apply straight away, including to a sidebar that's already open. Automatic summaries (on every new page you move to while the sidebar is open, or only on YouTube videos), Enter-to-send, search provider (DuckDuckGo, Google, Brave or SearXNG), what to attach, colours and text size, saving history, and, on a Mac, the AFM Server address and key under Advanced. Model and effort are in the sidebar's model menu.
 
 ## If nothing appears
 

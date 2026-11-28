@@ -14,7 +14,7 @@
   const SEL_MSG = "dia-sidebar:selection";
   const MAX_CHARS = 24000;
   const MAX_REFS = 12;
-  const VERSION = "2.14.0";
+  const VERSION = "2.15.0";
   const DEFAULT_PROMPT = "Summarize this page into concise bullet points.";
   const SYSTEM =
     "You are an AI assistant living in a sidebar next to the web page the user is viewing. " +
@@ -718,11 +718,27 @@
 
   // ---------- prefs ----------
   const pref = (k, d) => {
-    try { return Services.prefs.getStringPref(PREF + k, d) || d; } catch { return d; }
+    const n = PREF + k, P = Services.prefs;
+    try {
+      const t = P.getPrefType(n);
+      if (t === P.PREF_STRING) return P.getStringPref(n, d) || d;
+      if (t === P.PREF_BOOL) return String(P.getBoolPref(n)); // a dropdown with true/false values may be saved as a boolean
+      if (t === P.PREF_INT) return String(P.getIntPref(n));
+    } catch {}
+    return d;
   };
   const setPref = (k, v) => { try { Services.prefs.setStringPref(PREF + k, String(v)); } catch {} };
   // checkboxes in Sine's settings are real booleans
-  const bool = (k, d) => { try { return Services.prefs.getBoolPref(PREF + k); } catch { return d; } };
+  const bool = (k, d) => {
+    const n = PREF + k, P = Services.prefs;
+    try {
+      const t = P.getPrefType(n);
+      if (t === P.PREF_BOOL) return P.getBoolPref(n);
+      if (t === P.PREF_STRING) return P.getStringPref(n, "") === "true";
+      if (t === P.PREF_INT) return P.getIntPref(n) !== 0;
+    } catch {}
+    return d;
+  };
   // ---------- models ----------
   // Apple Intelligence (AFM Server) is built in and uses the address/key in Sine's settings. Any number of other
   // OpenAI-compatible models (Ollama, LM Studio, OpenRouter, OpenAI…) can be added from the model menu; they live in
@@ -2687,7 +2703,6 @@
       } catch {}
     }
     if (/\b(?:how many|how long|number of)\s+(?:days|weeks)\b|\bdays?\s+(?:until|till|since|between|from)\b/i.test(t)) {
-      const MONS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
       const found = [];
       for (const m of t.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) found.push({ at: m.index, y: +m[1], mo: +m[2] - 1, d: +m[3] });
       for (const m of t.matchAll(new RegExp(`\\b(${MON})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b`, "gi"))) found.push({ at: m.index, y: m[3] ? +m[3] : 0, mo: MON_N(m[1]) - 1, d: +m[2] });
@@ -3327,6 +3342,7 @@
     let started = false, busy = false, generating = false, stopped = false, closed = false, userHidden = false, wantFocus = false;
     let page = null, convo = [], refs = [], ctrl = null, gen = 0, refSeq = 0, chatId = null, chatTitle = "", pageRefPromoted = false;
     let usePage = true, skill = null, formats = [], manage = false, webOn = false; // webOn: the globe button
+    let lastAutoKey = ""; // the page that was last summarized automatically
     let queue = [], drainAfter = false, tabSnap = [], lastKey = "";
     const reading = new Set(); // tab / link reads still in flight
     let picker = null, linkCache = { key: "", links: [], pending: false }; // the tab & link picker, and the page's links read ahead of time
@@ -4719,7 +4735,9 @@
       renderPills();
       scrollDown(true);
       if (firstMessage && !page) {
-        if (srcUrl()) { startFirst(entry); return; }
+        if (srcUrl() && snap.usePage) { startFirst(entry); return; } // the page is included: read it first
+        // The page was left out on purpose (or there is none): don't read it, and don't slip it in later as an attachment
+        // (it used to be read anyway and added as a card, so the next message carried the page you had excluded).
         page = { none: true, title: "", url: "", text: "" };
         pageRefPromoted = true;
         renderPills();
@@ -4750,7 +4768,7 @@
       if (page.text) page.context = condense(page.text, chunkSize());
       convo = c.msgs.map((m) => ({ ...m }));
       pageRefPromoted = convo.some((m) => m.role === "user" && m.pageContext !== undefined);
-      if (pageRefPromoted && !page.none) {
+      if (pageRefPromoted && !page.none && convo.find((m) => m.role === "user")?.pageContext !== false) {
         refs.push({ id: ++refSeq, kind: "tab", pageSource: true, label: page.title || hostOf(page.url), url: page.url, image: src.image, text: page.text });
       }
       started = true;
@@ -5224,11 +5242,31 @@
     // switches). A different page/video starts a fresh chat (the old one stays in History);
     // otherwise just refresh the page attachment card.
     function refreshAttach() { if (closed) return; if (!started) renderPills(); else updateWebBtn(); }
+    // "Attach the current page automatically" changed in settings: applies right away to a chat that hasn't started
+    function applyAttachPref() { if (closed || started) return; usePage = !!srcUrl() && bool("attachpage", true); renderPills(); }
+    // "Summarize automatically" also applies when you move to another page (or video) with the sidebar open, once it has loaded
+    function autoSummarizeNav() {
+      const mode = pref("autosummarize", "youtube");
+      if (mode === "false" || closed || !panel || panel.hidden || userHidden || !bool("setupdone", false) || activeModel().noModel) return;
+      const key = srcKey();
+      if (!srcUrl() || key === lastAutoKey || !(mode === "true" || (mode === "youtube" && isVid()))) return;
+      lastAutoKey = key;
+      let tries = 0;
+      const tick = () => {
+        if (closed || srcKey() !== key || started || busy) return;
+        let loading = false;
+        try { loading = !!src.linkedBrowser?.webProgress?.isLoadingDocument; } catch {}
+        if (loading && ++tries < 25) { setTimeout(tick, 400); return; }
+        runSkill(skillsFor(isVid())[0]);
+      };
+      setTimeout(tick, 600);
+    }
     function onNav() {
       if (closed) return;
       const key = srcKey();
       if (key === lastKey) { refreshAttach(); return; }
       lastKey = key;
+      setTimeout(autoSummarizeNav, 0);
       if (started || convo.length || page) newChat();
       else { usePage = !!srcUrl() && bool("attachpage", true); logEl?.querySelector(".dia-empty") && (logEl.replaceChildren(), renderEmpty()); renderPills(); }
     }
@@ -5316,6 +5354,7 @@
       if (!panel) build();
       newChat(false);
       lastKey = srcKey();
+      lastAutoKey = lastKey; // this page is handled just below (open), so the navigation hook leaves it alone
       userHidden = false;
       sync();
       focusInput();
@@ -5355,7 +5394,7 @@
     }
 
     self = {
-      open, sync, dismiss, restore, close, onNav, refreshAttach, refreshModel, addRef, startOnboarding: () => openOnboarding(),
+      open, sync, dismiss, restore, close, onNav, refreshAttach, applyAttachPref, refreshModel, addRef, startOnboarding: () => openOnboarding(),
       has: (t) => isMember(t),
       get src() { return src; },
       get visible() { return !!panel && !panel.hidden; },
@@ -5433,7 +5472,16 @@
   gBrowser.tabContainer.addEventListener("TabSelect", onSelect);
   gBrowser.tabContainer.addEventListener("TabClose", onTabClose);
   // settings take effect immediately (side, text size, colours, search mode, URL bar button…)
-  const prefObserver = { observe(_s, _t, data) { try { if (data === PREF + "rerunsetup") { resetSetup(); return; } syncAll(); sessions.forEach((s) => { s.refreshAttach(); s.refreshModel(); }); applyUrlbarPref(); } catch (e) { console.warn("[dia-sidebar] settings", e); } } };
+  const prefObserver = { observe(_s, _t, data) {
+    try {
+      if (data === PREF + "rerunsetup") { // only when the box is ticked, not when it is cleared again (that used to run the reset a second time)
+        if (bool("rerunsetup", false)) { try { Services.prefs.setBoolPref(PREF + "rerunsetup", false); } catch {} resetSetup(); }
+        return;
+      }
+      syncAll(); sessions.forEach((s) => { s.refreshAttach(); s.refreshModel(); }); applyUrlbarPref();
+      if (data === PREF + "attachpage") sessions.forEach((s) => s.applyAttachPref());
+    } catch (e) { console.warn("[dia-sidebar] settings", e); }
+  } };
   try { Services.prefs.addObserver(PREF, prefObserver); } catch (e) { console.warn("[dia-sidebar] settings observer", e); }
   try { Services.prefs.addObserver("zen.tabs.vertical", prefObserver); } catch (e) { console.warn("[dia-sidebar] tab sidebar observer", e); } // follow the tab sidebar when it switches sides
 
